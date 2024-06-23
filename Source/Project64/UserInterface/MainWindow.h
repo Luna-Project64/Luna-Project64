@@ -6,6 +6,7 @@
 #include <Project64\UserInterface\CheatUI.h>
 #include <Project64\UserInterface\EnhancementUI.h>
 #include <Project64\UserInterface\ProjectSupport.h>
+#include <Project64\UserInterface\Settings\SimplifiedSettings.h>
 
 class CGfxPlugin;      // Plugin that controls the rendering
 class CAudioPlugin;    // Plugin for audio, need the hwnd
@@ -67,6 +68,7 @@ public:
     bool ResetPluginsInUiThread(CPlugins * plugins, CN64System * System);
 
     void DisplayCheatsUI(bool BlockExecution);
+    void DisplaySimpleSettingsUI(bool BlockExecution);
     void DisplayEnhancements(bool BlockExecution);
 
     void * GetWindowHandle(void) const { return m_hMainWindow; }
@@ -112,6 +114,7 @@ private:
     CCheatsUI m_CheatsUI;
     CEnhancementUI m_EnhancementUI;
     CProjectSupport m_Support;
+    SimplifiedSettings m_SimpleSettingsUI;
 
     const bool m_bMainWindow;
     bool m_Created;

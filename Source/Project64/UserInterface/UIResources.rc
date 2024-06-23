@@ -2340,6 +2340,80 @@ IDR_JSAPI_TEXT          TEXT                    "API.js"
 /////////////////////////////////////////////////////////////////////////////
 
 
+/////////////////////////////////////////////////////////////////////////////
+// English (United Kingdom) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENG)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_UK
+#pragma code_page(1252)
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_SimplifiedSettings DIALOGEX 0, 0, 257, 274
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Luna's Project64 Simplified Settings"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "Apply to all games",IDALLGAMES,168,253,82,14
+    PUSHBUTTON      "Cancel",IDCANCEL,7,253,82,14
+    CONTROL         "Pause emulation when window is minimized",IDC_MINIMIZEDSLEEP,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,30,206,10
+    CONTROL         "Enable Discord Rich Presence",IDC_DISCORD_RPC,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,47,206,10
+    RTEXT           "Input delay in milliseconds:",IDC_INPUTDELAY_TXT,18,105,100,10
+    EDITTEXT        IDC_INPUTDELAY,124,104,41,12,ES_AUTOHSCROLL | ES_NUMBER
+    PUSHBUTTON      "Apply to current game",IDCURRENTGAME,168,235,82,14
+    RTEXT           "Counter Factor:",IDC_COUNTFACT_TEXT,27,160,91,10
+    COMBOBOX        IDC_COUNTFACT,124,159,109,49,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "Overclock VI:",IDC_OVERCLOCKVI_TEXT,27,176,91,10
+    COMBOBOX        IDC_OVERCLOCKVI,124,175,109,49,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "Accurate graphics (ParaLLEl):",IDC_ACCURATEGFX_TEXT,7,144,111,10
+    COMBOBOX        IDC_ACCURATEGFX,124,143,109,49,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Legacy graphics system (Jabo)",IDC_JABOGFX,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,191,134,10
+    CONTROL         "Use interpreter core",IDC_INTERPRETER,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,205,134,10
+    PUSHBUTTON      "Help",IDHELP,7,235,82,14
+    COMBOBOX        CONT_LIST,17,85,200,79,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "Input plugin:",IDC_CONT_NAME2,7,72,243,52
+    GROUPBOX        "Accuracy and Performance:",IDC_ACCURACY,7,129,243,93
+    GROUPBOX        "General Settings:",IDC_GENERAL_SETTINGS,10,16,240,52
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_SimplifiedSettings, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 250
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 267
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_SimplifiedSettings AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+#endif    // English (United Kingdom) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
 
 #ifndef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////

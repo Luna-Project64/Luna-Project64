@@ -255,6 +255,9 @@
     <ClCompile Include="UserInterface\RomBrowser.cpp">
       <Filter>Source Files\User Interface Source</Filter>
     </ClCompile>
+    <ClCompile Include="UserInterface\Settings\SimplifiedSettings.cpp">
+      <Filter>Source Files\User Interface Source\Settings Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="UserInterface\resource.h">
@@ -493,6 +496,9 @@
     </ClInclude>
     <ClInclude Include="UserInterface\CheatUI.h">
       <Filter>Header Files\User Interface Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="UserInterface\Settings\SimplifiedSettings.h">
+      <Filter>Header Files\User Interface Headers\Settings Header</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -356,6 +356,11 @@ void CMainGui::DisplayCheatsUI(bool BlockExecution)
     m_CheatsUI.Display(m_hMainWindow, BlockExecution);
 }
 
+void CMainGui::DisplaySimpleSettingsUI(bool BlockExecution)
+{
+    m_SimpleSettingsUI.Display(m_hMainWindow, BlockExecution);
+}
+
 void CMainGui::DisplayEnhancements(bool BlockExecution)
 {
     m_EnhancementUI.Display(m_hMainWindow, BlockExecution);

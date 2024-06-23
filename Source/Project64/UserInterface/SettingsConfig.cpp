@@ -1,6 +1,8 @@
+#pragma once
 #include "stdafx.h"
 
 #include "SettingsConfig.h"
+#include "Settings/SimplifiedSettings.h"
 #include "Settings/SettingsPage.h"
 #include <Project64-core/Settings/SettingType/SettingsType-Application.h>
 

@@ -71,6 +71,7 @@ void CLanguage::LoadDefaultStrings(void)
     DEF_STR(MENU_CONFG_CTRL, "&Input Settings");
     DEF_STR(MENU_CONFG_RSP, "&RSP Settings");
     DEF_STR(MENU_SHOW_CPU, "Show CPU &Stats");
+    DEF_STR(MENU_SIMPLE_SETTINGS, "Simple Configuration");
     DEF_STR(MENU_SETTINGS, "Configura&tion");
 
     // Debugger menu

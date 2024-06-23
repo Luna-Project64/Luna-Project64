@@ -75,6 +75,7 @@ enum MainMenuID
 
     // New stuff
     ID_FILE_MOUNT_SDCARD,
+    ID_OPTIONS_SIMPLE_SETTINGS,
 };
 
 class CMainMenu :
@@ -104,6 +105,7 @@ private:
     void OnLodState(HWND hWnd);
     void OnEnhancements(HWND hWnd);
     void OnCheats(HWND hWnd);
+    void OnSimpleSettings(HWND hWnd);
     void OnSettings(HWND hWnd);
     void OnSupportProject64(HWND hWnd);
 

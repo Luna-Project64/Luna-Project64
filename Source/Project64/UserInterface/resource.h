@@ -6,6 +6,7 @@
 #define VER_VER_DEBUG                   0
 #define VERSION_REVISION                1
 #define VERSION_MAJOR                   3
+#define IDCURRENTGAME                   3
 #define IDI_PJ64_Icon                   101
 #define IDD_Rom_Information             104
 #define IDD_Key_Prompt                  108
@@ -86,6 +87,7 @@
 #define IDD_Support_RequestCode         216
 #define IDD_Settings_GameDiskDrive      217
 #define IDD_Enhancement_Plugins         218
+#define IDD_SimplifiedSettings          226
 #define IDC_MENU_ITEM_TEXT              1000
 #define IDC_CLOSE_BUTTON                1001
 #define IDC_LIST2                       1003
@@ -264,6 +266,7 @@
 #define IDC_RSP_NAME                    1097
 #define IDC_REMEMBERDIR                 1097
 #define IDC_VIREFESH_TEXT               1097
+#define IDC_OVERCLOCKVI_TEXT            1097
 #define IDC_VIREFRESH                   1098
 #define IDC_MINIMIZEDSLEEP              1098
 #define IDC_AUDIO_NAME                  1099
@@ -274,18 +277,23 @@
 #define IDC_CONT_NAME                   1100
 #define IDC_COUNTPERBYTE                1100
 #define ID_SUPPORT_PJ64                 1100
+#define IDC_ACCURATEGFX_TEXT            1100
 #define IDC_DIR_FRAME1                  1101
 #define IDC_ROM_FASTSP                  1101
 #define IDC_INFO                        1101
 #define IDC_OVER_CLOCK_MODIFIER_TEXT    1101
 #define IDC_DISKSEEKTIMING_TEXT1        1101
+#define IDC_CONT_NAME2                  1101
 #define IDC_AUDIO_SIGNAL                1102
 #define IDC_DIR_TEXTURE_FRAME           1102
 #define IDC_ENTER_CODE                  1102
 #define IDC_DESCRIPTION                 1102
+#define IDC_ACCURACY                    1102
 #define IDC_DIR_FRAME3                  1103
 #define IDC_OVER_CLOCK_MODIFIER         1103
 #define IDC_REQUEST_DESCPTION           1103
+#define IDC_CONT_NAME3                  1103
+#define IDC_GENERAL_SETTINGS            1103
 #define IDC_DIR_FRAME4                  1104
 #define IDC_REQUEST_LINK                1104
 #define IDC_DIR_FRAME5                  1105
@@ -350,7 +358,9 @@
 #define IDC_EXIT_FULLSCREEN_ON_LOSE_FOCUS 1148
 #define IDC_SHELL_INT_TEXT              1149
 #define IDC_COUNTFACT                   1151
+#define IDC_OVERCLOCKVI                 1152
 #define IDC_MEMORY_SIZE_TEXT            1153
+#define IDC_ACCURATEGFX                 1153
 #define IDC_SAVE_TYPE_TEXT              1154
 #define IDC_SYNC_AUDIO                  1156
 #define IDC_USE_TLB                     1157
@@ -660,6 +670,7 @@
 #define IDC_LO_LBL                      1514
 #define IDC_NUM_RESULTS                 1515
 #define IDC_DISCORD_RPC                 1516
+#define IDC_JABOGFX                     1517
 #define IDC_SCRL_RESULTS                1518
 #define IDC_LST_WATCHLIST               1520
 #define IDC_CHK_PHYSICAL                1522
@@ -885,6 +896,7 @@
 #define IDC_RADIO_PJ64_VIDEO            1729
 #define IDC_GFX_PLUGIN                  1731
 #define IDC_INPUT_PLUGIN                1732
+#define IDALLGAMES                      1732
 #define VERSION_BUILD                   5672
 #define ID_POPUPMENU_PLAYGAMEWITHDISK   40008
 #define ID_POPUPMENU_ADDSYMBOL          40013
@@ -957,9 +969,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        226
+#define _APS_NEXT_RESOURCE_VALUE        228
 #define _APS_NEXT_COMMAND_VALUE         40121
-#define _APS_NEXT_CONTROL_VALUE         1732
+#define _APS_NEXT_CONTROL_VALUE         1733
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif

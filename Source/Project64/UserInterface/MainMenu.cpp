@@ -290,6 +290,11 @@ void CMainMenu::OnCheats(HWND /*hWnd*/)
     m_Gui->DisplayCheatsUI(false);
 }
 
+void CMainMenu::OnSimpleSettings(HWND /*hWnd*/)
+{
+    m_Gui->DisplaySimpleSettingsUI(false);
+}
+
 void CMainMenu::OnSettings(HWND hWnd)
 {
     CSettingConfig().Display(hWnd);
@@ -490,6 +495,7 @@ bool CMainMenu::ProcessMessage(HWND hWnd, DWORD /*FromAccelerator*/, DWORD MenuI
             g_Settings->SaveBool(UserInterface_ShowCPUPer, true);
         }
         break;
+    case ID_OPTIONS_SIMPLE_SETTINGS: OnSimpleSettings(hWnd); break;
     case ID_OPTIONS_SETTINGS: OnSettings(hWnd);  break;
     case ID_PROFILE_PROFILE:
         g_Settings->SaveBool(Debugger_RecordExecutionTimes, !g_Settings->LoadBool(Debugger_RecordExecutionTimes));
@@ -1470,6 +1476,7 @@ void CMainMenu::FillOutMenu(HMENU hMenu)
         if (g_Settings->LoadDword(UserInterface_ShowCPUPer)) { Item.SetItemTicked(true); }
         OptionMenu.push_back(Item);
     }
+    OptionMenu.push_back(MENU_ITEM(ID_OPTIONS_SIMPLE_SETTINGS, MENU_SIMPLE_SETTINGS, m_ShortCuts.ShortCutString(ID_OPTIONS_SIMPLE_SETTINGS, RunningState)));
     OptionMenu.push_back(MENU_ITEM(ID_OPTIONS_SETTINGS, MENU_SETTINGS, m_ShortCuts.ShortCutString(ID_OPTIONS_SETTINGS, RunningState)));
 
     // Profile menu

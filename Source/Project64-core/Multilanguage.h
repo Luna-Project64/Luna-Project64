@@ -84,6 +84,7 @@ enum LanguageStringID
     MENU_CONFG_RSP = 146,
     MENU_SHOW_CPU = 147,
     MENU_SETTINGS = 148,
+    MENU_SIMPLE_SETTINGS = 149,
 
     // Debugger menu
     MENU_DEBUGGER = 160,
