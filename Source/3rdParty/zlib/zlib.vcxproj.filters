@@ -159,22 +159,7 @@
     <ClCompile Include="contrib\minizip\mz_zip_rw.c">
       <Filter>Minizip</Filter>
     </ClCompile>
-    <ClCompile Include="arch\x86\adler32_avx2.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\adler32_avx512.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\adler32_avx512_vnni.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\adler32_sse42.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
     <ClCompile Include="arch\x86\adler32_ssse3.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\chunkset_avx2.c">
       <Filter>Source Files\Arch\x86</Filter>
     </ClCompile>
     <ClCompile Include="arch\x86\chunkset_sse2.c">
@@ -183,19 +168,7 @@
     <ClCompile Include="arch\x86\chunkset_ssse3.c">
       <Filter>Source Files\Arch\x86</Filter>
     </ClCompile>
-    <ClCompile Include="arch\x86\compare256_avx2.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
     <ClCompile Include="arch\x86\compare256_sse2.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\crc32_pclmulqdq.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\crc32_vpclmulqdq.c">
-      <Filter>Source Files\Arch\x86</Filter>
-    </ClCompile>
-    <ClCompile Include="arch\x86\slide_hash_avx2.c">
       <Filter>Source Files\Arch\x86</Filter>
     </ClCompile>
     <ClCompile Include="arch\x86\slide_hash_sse2.c">

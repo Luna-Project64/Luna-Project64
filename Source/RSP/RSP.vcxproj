@@ -27,7 +27,7 @@
     <ConfigurationType>DynamicLibrary</ConfigurationType>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>ClangCL</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -74,6 +74,7 @@
       <FavorSizeOrSpeed Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Speed</FavorSizeOrSpeed>
       <OmitFramePointers Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</OmitFramePointers>
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</WholeProgramOptimization>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/Gw -fmerge-all-constants -flto=thin -fsplit-lto-unit -fwhole-program-vtables -mssse3 -O2 /clang:-fno-math-errno /clang:-fno-trapping-math %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link />
     <Bscmake>
@@ -82,6 +83,9 @@
     <PreBuildEvent>
       <Command>"$(SolutionDir)Source\Script\UpdateVersion.cmd" "$(Configuration)" "$(Platform)" "$(SolutionDir)Source\RSP\Version.h.in" "$(SolutionDir)Source\RSP\Version.h"</Command>
     </PreBuildEvent>
+    <Link>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/opt:lldltojobs=all -mllvm:-disable-auto-upgrade-debug-info /call-graph-profile-sort /opt:lldlto=3 %(AdditionalOptions)</AdditionalOptions>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="breakpoint.c" />

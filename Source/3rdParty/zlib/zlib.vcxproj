@@ -27,8 +27,8 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -54,7 +54,7 @@
       <WarningLevel>Level3</WarningLevel>
       <DisableSpecificWarnings>4005;4006;4100;4127;4131;4189;4244;4701;4703;4996</DisableSpecificWarnings>
       <!-- Fix for later VC versions on XP: 45KB + 436 -->
-      <PreprocessorDefinitions>X86_FEATURES;X86_SSE2;X86_SSSE3;X86_SSE42;X86_AVX2;X86_AVX512;X86_AVX512VNNI;X86_PCLMULQDQ_CRC;X86_VPCLMULQDQ_CRC;HAVE_ZLIB;WITH_GZFILEOP;$(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>X86_FEATURES;X86_SSE2;X86_SSSE3;HAVE_BUILTIN_CTZ;HAVE_ZLIB;WITH_GZFILEOP;$(PreprocessorDefinitions)</PreprocessorDefinitions>
       <CallingConvention Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">FastCall</CallingConvention>
       <CallingConvention Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">FastCall</CallingConvention>
       <CallingConvention Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">FastCall</CallingConvention>
@@ -67,12 +67,13 @@
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Speed</FavorSizeOrSpeed>
       <OmitFramePointers Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</OmitFramePointers>
-      <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</WholeProgramOptimization>
+      <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</WholeProgramOptimization>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MaxSpeed</Optimization>
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AnySuitable</InlineFunctionExpansion>
       <FavorSizeOrSpeed Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Speed</FavorSizeOrSpeed>
       <OmitFramePointers Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</OmitFramePointers>
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</WholeProgramOptimization>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/Gw -fmerge-all-constants -flto=thin -fsplit-lto-unit -fwhole-program-vtables -mssse3 -O2 /clang:-fno-math-errno /clang:-fno-trapping-math %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -84,19 +85,10 @@
     <ClCompile Include="arch\generic\crc32_braid_c.c" />
     <ClCompile Include="arch\generic\crc32_fold_c.c" />
     <ClCompile Include="arch\generic\slide_hash_c.c" />
-    <ClCompile Include="arch\x86\adler32_avx2.c" />
-    <ClCompile Include="arch\x86\adler32_avx512.c" />
-    <ClCompile Include="arch\x86\adler32_avx512_vnni.c" />
-    <ClCompile Include="arch\x86\adler32_sse42.c" />
     <ClCompile Include="arch\x86\adler32_ssse3.c" />
-    <ClCompile Include="arch\x86\chunkset_avx2.c" />
     <ClCompile Include="arch\x86\chunkset_sse2.c" />
     <ClCompile Include="arch\x86\chunkset_ssse3.c" />
-    <ClCompile Include="arch\x86\compare256_avx2.c" />
     <ClCompile Include="arch\x86\compare256_sse2.c" />
-    <ClCompile Include="arch\x86\crc32_pclmulqdq.c" />
-    <ClCompile Include="arch\x86\crc32_vpclmulqdq.c" />
-    <ClCompile Include="arch\x86\slide_hash_avx2.c" />
     <ClCompile Include="arch\x86\slide_hash_sse2.c" />
     <ClCompile Include="arch\x86\x86_features.c" />
     <ClCompile Include="compress.c" />

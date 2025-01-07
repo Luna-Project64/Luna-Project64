@@ -95,10 +95,10 @@ private:
 
     static LRESULT CALLBACK MainGui_Proc(HWND, DWORD, DWORD, DWORD);
 
-    friend void CALL RomBowserEnabledChanged(CMainGui * Gui);
-    friend void CALL RomBowserColoumnsChanged(CMainGui * Gui);
-    friend void CALL RomBrowserListChanged(CMainGui * Gui);
-	friend void CALL DiscordRPCChanged(CMainGui * Gui);
+    static void CALL RomBowserEnabledChanged(CMainGui * Gui);
+    static void CALL RomBowserColoumnsChanged(CMainGui * Gui);
+    static void CALL RomBrowserListChanged(CMainGui * Gui);
+    static void CALL DiscordRPCChanged(CMainGui * Gui);
     static void CALL LoadingInProgressChanged(CMainGui * Gui);
     static void CALL GameLoaded(CMainGui * Gui);
     static void CALL GamePaused(CMainGui * Gui);

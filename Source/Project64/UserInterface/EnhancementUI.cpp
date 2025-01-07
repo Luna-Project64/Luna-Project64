@@ -328,7 +328,7 @@ void CEnhancementUI::AddCodeLayers(LPARAM Enhancement, const std::wstring & Name
     wchar_t Text[500], Item[500];
     if (Name.length() > ((sizeof(Text) / sizeof(Text[0])) - 5)) { g_Notify->BreakPoint(__FILE__, __LINE__); }
     wcscpy(Text, Name.c_str());
-    if (wcschr(Text, L'\\') > 0) { *wcschr(Text, L'\\') = 0; }
+    if (wcschr(Text, L'\\')) { *wcschr(Text, L'\\') = 0; }
 
     tv.item.mask = TVIF_TEXT;
     tv.item.pszText = Item;

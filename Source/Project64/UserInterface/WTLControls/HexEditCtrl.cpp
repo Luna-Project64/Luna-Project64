@@ -1694,9 +1694,9 @@ void CHexEditCtrl::UpdateLayoutInfo(void)
     int columnsTop = 0 + headerHeight;
     int columnsBottom = columnsTop + m_NumVisibleRows * m_CharHeight;
 
-    m_AddressColumnRect = { addressColumnLeft, columnsTop, addressColumnRight, columnsBottom };
-    m_HexDataColumnRect = { hexDataColumnLeft, columnsTop, hexDataColumnRight, columnsBottom };
-    m_AsciiColumnRect = { asciiColumnLeft, columnsTop, asciiColumnRight, columnsBottom };
+    m_AddressColumnRect = CRect{ addressColumnLeft, columnsTop, addressColumnRight, columnsBottom };
+    m_HexDataColumnRect = CRect{ hexDataColumnLeft, columnsTop, hexDataColumnRight, columnsBottom };
+    m_AsciiColumnRect = CRect{ asciiColumnLeft, columnsTop, asciiColumnRight, columnsBottom };
 
     m_bLayoutChanged = true;
 }

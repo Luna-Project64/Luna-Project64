@@ -189,7 +189,7 @@ void CMainGui::ShowRomBrowser(void)
     }
 }
 
-void CALL RomBowserEnabledChanged(CMainGui * Gui)
+void CALL CMainGui::RomBowserEnabledChanged(CMainGui * Gui)
 {
     if (Gui && UISettingsLoadBool(RomBrowser_Enabled))
     {
@@ -286,18 +286,18 @@ void CMainGui::ShowStatusBarChanged(CMainGui * Gui)
     }
 }
 
-void CALL RomBowserColoumnsChanged(CMainGui * Gui)
+void CMainGui::RomBowserColoumnsChanged(CMainGui * Gui)
 {
     Gui->ResetRomBrowserColomuns();
 }
 
-void CALL RomBrowserListChanged(CMainGui * Gui)
+void CMainGui::RomBrowserListChanged(CMainGui * Gui)
 {
     Gui->RefreshRomList();
     Gui->HighLightLastRom();
 }
 
-void CALL DiscordRPCChanged(CMainGui*)
+void CMainGui::DiscordRPCChanged(CMainGui*)
 {
 	if (UISettingsLoadBool(Setting_EnableDiscordRPC))
 	{

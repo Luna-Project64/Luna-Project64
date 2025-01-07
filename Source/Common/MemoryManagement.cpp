@@ -122,7 +122,7 @@ bool ProtectMemory(void* addr, size_t size, MEM_PROTECTION memProtection, MEM_PR
     {
         if (!TranslateToMemProtect(OldOsProtect, *OldProtect))
         {
-            return nullptr;
+            return false;
         }
     }
     return res != 0;

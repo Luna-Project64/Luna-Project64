@@ -27,7 +27,7 @@
     <ConfigurationType>Application</ConfigurationType>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>ClangCL</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -66,6 +66,7 @@
       <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Winhttp.lib;Bcrypt.lib;%(AdditionalDependencies);$(DelayImplib)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Winhttp.lib;%(AdditionalDependencies);$(DelayImplib)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Winhttp.lib;%(AdditionalDependencies);$(DelayImplib)</AdditionalDependencies>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/opt:lldltojobs=all -mllvm:-disable-auto-upgrade-debug-info /call-graph-profile-sort /opt:lldlto=3 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <Manifest Condition="'$(PlatformToolset)'!='v90'">
       <EnableDPIAwareness>true</EnableDPIAwareness>
@@ -97,6 +98,7 @@
       <OmitFramePointers Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</OmitFramePointers>
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</WholeProgramOptimization>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">RETROACHIEVEMENTS;_UNICODE;UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/Gw -fmerge-all-constants -flto=thin -fsplit-lto-unit -fwhole-program-vtables -mssse3 -O2 /clang:-fno-math-errno /clang:-fno-trapping-math %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile>
       <CallingConvention Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">FastCall</CallingConvention>

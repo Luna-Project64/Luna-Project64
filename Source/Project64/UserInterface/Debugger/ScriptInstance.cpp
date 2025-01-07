@@ -701,7 +701,8 @@ duk_ret_t CScriptInstance::js_ioSockAccept(duk_context* ctx)
 
     if (!ok) {
         duk_push_boolean(ctx, false);
-    } else {
+    }
+    else {
         duk_push_boolean(ctx, true);
     }
 
@@ -999,7 +1000,8 @@ duk_ret_t CScriptInstance::js_GetROMInt(duk_context* ctx)
 
     if (g_Rom == nullptr)
     {
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     uint8_t* rom = g_Rom->GetRomAddress(); // Little endian
@@ -1007,7 +1009,8 @@ duk_ret_t CScriptInstance::js_GetROMInt(duk_context* ctx)
 
     if (address > romSize)
     {
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     DWORD retval;
@@ -1033,7 +1036,8 @@ duk_ret_t CScriptInstance::js_GetROMInt(duk_context* ctx)
         break;
     }
     default:
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     if (bSigned)
@@ -1045,10 +1049,6 @@ duk_ret_t CScriptInstance::js_GetROMInt(duk_context* ctx)
         duk_push_uint(ctx, retval);
     }
 
-    return 1;
-
-return_err:
-    duk_push_boolean(ctx, false);
     return 1;
 }
 
@@ -1068,7 +1068,8 @@ duk_ret_t CScriptInstance::js_GetROMFloat(duk_context* ctx)
 
     if (g_Rom == nullptr)
     {
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     uint8_t* rom = g_Rom->GetRomAddress(); // Little endian
@@ -1076,7 +1077,8 @@ duk_ret_t CScriptInstance::js_GetROMFloat(duk_context* ctx)
 
     if (address > romSize)
     {
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     if (!bDouble)
@@ -1096,10 +1098,6 @@ duk_ret_t CScriptInstance::js_GetROMFloat(duk_context* ctx)
 
     duk_push_number(ctx, value);
     return 1;
-
-return_err:
-    duk_push_boolean(ctx, false);
-    return 1;
 }
 
 duk_ret_t CScriptInstance::js_GetRDRAMInt(duk_context* ctx)
@@ -1113,7 +1111,8 @@ duk_ret_t CScriptInstance::js_GetRDRAMInt(duk_context* ctx)
 
     if (g_MMU == nullptr)
     {
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     DWORD retval;
@@ -1125,7 +1124,8 @@ duk_ret_t CScriptInstance::js_GetRDRAMInt(duk_context* ctx)
         uint8_t val;
         if (!_this->m_Debugger->DebugLoad_VAddr(address, val))
         {
-            goto return_err;
+            duk_push_boolean(ctx, false);
+            return 1;
         }
         retval = bSigned ? (char)val : val;
         break;
@@ -1135,7 +1135,8 @@ duk_ret_t CScriptInstance::js_GetRDRAMInt(duk_context* ctx)
         uint16_t val;
         if (!_this->m_Debugger->DebugLoad_VAddr(address, val))
         {
-            goto return_err;
+            duk_push_boolean(ctx, false);
+            return 1;
         }
         retval = bSigned ? (short)val : val;
         break;
@@ -1145,13 +1146,15 @@ duk_ret_t CScriptInstance::js_GetRDRAMInt(duk_context* ctx)
         uint32_t val;
         if (!_this->m_Debugger->DebugLoad_VAddr(address, val))
         {
-            goto return_err;
+            duk_push_boolean(ctx, false);
+            return 1;
         }
         retval = bSigned ? (int)val : val;
         break;
     }
     default:
-        goto return_err;
+        duk_push_boolean(ctx, false);
+        return 1;
     }
 
     if (bSigned)
@@ -1163,10 +1166,6 @@ duk_ret_t CScriptInstance::js_GetRDRAMInt(duk_context* ctx)
         duk_push_uint(ctx, retval);
     }
 
-    return 1;
-
-return_err:
-    duk_push_boolean(ctx, false);
     return 1;
 }
 
@@ -1578,7 +1577,7 @@ duk_ret_t CScriptInstance::js_FSOpen(duk_context* ctx)
     }
 
     duk_push_number(ctx, fd);
-    
+
     return 1;
 }
 
@@ -1596,7 +1595,7 @@ duk_ret_t CScriptInstance::js_FSClose(duk_context* ctx)
 
     int fd = duk_get_int(ctx, 0);
     duk_pop_n(ctx, nargs);
-    
+
     _this->CloseFile(fd);
 
     return 1;
@@ -1606,12 +1605,14 @@ duk_ret_t CScriptInstance::js_FSWrite(duk_context* ctx)
 {
     CScriptInstance* _this = FetchInstance(ctx);
     int nargs = duk_get_top(ctx);
-    
+
     size_t nBytesWritten = 0;
 
     if (nargs < 2)
     {
-        goto end;
+        duk_pop_n(ctx, nargs);
+        duk_push_number(ctx, nBytesWritten);
+        return 1;
     }
 
     int fd = duk_get_int(ctx, 0);
@@ -1620,14 +1621,16 @@ duk_ret_t CScriptInstance::js_FSWrite(duk_context* ctx)
 
     if (fp == nullptr)
     {
-        goto end;
+        duk_pop_n(ctx, nargs);
+        duk_push_number(ctx, nBytesWritten);
+        return 1;
     }
-    
+
     const char* buffer;
     int offset = 0;
     duk_size_t length = 0;
     int position = 0; // fseek
-    
+
     if (duk_is_string(ctx, 1))
     {
         // String
@@ -1640,10 +1643,12 @@ duk_ret_t CScriptInstance::js_FSWrite(duk_context* ctx)
     {
         // Buffer
         buffer = (const char*)duk_get_buffer_data(ctx, 1, &length);
-        
+
         if (buffer == nullptr)
         {
-            goto end;
+            duk_pop_n(ctx, nargs);
+            duk_push_number(ctx, nBytesWritten);
+            return 1;
         }
     }
 
@@ -1671,7 +1676,7 @@ duk_ret_t CScriptInstance::js_FSWrite(duk_context* ctx)
 
     nBytesWritten = fwrite(buffer, 1, length, fp);
 
-    end:
+end:
     duk_pop_n(ctx, nargs);
     duk_push_number(ctx, nBytesWritten);
     return 1;
@@ -1688,7 +1693,9 @@ duk_ret_t CScriptInstance::js_FSRead(duk_context* ctx)
 
     if (nargs < 5)
     {
-        goto end;
+        duk_pop_n(ctx, nargs);
+        duk_push_number(ctx, nBytesRead);
+        return 1;
     }
 
     duk_size_t bufferSize;
@@ -1701,14 +1708,18 @@ duk_ret_t CScriptInstance::js_FSRead(duk_context* ctx)
 
     if (bufferSize == 0)
     {
-        goto end;
+        duk_pop_n(ctx, nargs);
+        duk_push_number(ctx, nBytesRead);
+        return 1;
     }
 
     FILE* fp = _this->GetFilePointer(fd);
 
     if (fp == nullptr)
     {
-        goto end;
+        duk_pop_n(ctx, nargs);
+        duk_push_number(ctx, nBytesRead);
+        return 1;
     }
 
     if (offset + length > bufferSize)
@@ -1719,7 +1730,7 @@ duk_ret_t CScriptInstance::js_FSRead(duk_context* ctx)
     fseek(fp, position, SEEK_SET);
     nBytesRead = fread(&buffer[offset], 1, length, fp);
 
-    end:
+end:
     duk_pop_n(ctx, nargs);
     duk_push_number(ctx, nBytesRead);
     return 1;
@@ -1766,7 +1777,7 @@ duk_ret_t CScriptInstance::js_FSFStat(duk_context* ctx)
         { "ctimeMs",  (duk_double_t)statbuf.st_ctime * 1000 },
         { nullptr, 0 }
     };
-    
+
     duk_put_number_list(ctx, obj_idx, props);
     return 1;
 }
@@ -1783,7 +1794,7 @@ duk_ret_t CScriptInstance::js_FSStat(duk_context* ctx)
     }
 
     const char* path = duk_get_string(ctx, 0);
-    
+
     struct stat statbuf;
     int res = stat(path, &statbuf);
 
@@ -1797,7 +1808,7 @@ duk_ret_t CScriptInstance::js_FSStat(duk_context* ctx)
     duk_pop_n(ctx, nargs);
 
     duk_idx_t obj_idx = duk_push_object(ctx);
-    
+
     const duk_number_list_entry props[] = {
         { "dev",      (duk_double_t)statbuf.st_dev },
         { "ino",      (duk_double_t)statbuf.st_ino },
@@ -1820,7 +1831,7 @@ duk_ret_t CScriptInstance::js_FSStat(duk_context* ctx)
 duk_ret_t CScriptInstance::js_FSMkDir(duk_context* ctx)
 {
     int nargs = duk_get_top(ctx);
-    
+
     if (nargs < 1)
     {
         duk_push_false(ctx);
@@ -1856,7 +1867,7 @@ duk_ret_t CScriptInstance::js_FSRmDir(duk_context* ctx)
     const char* path = duk_get_string(ctx, 0);
 
     duk_pop_n(ctx, nargs);
-    
+
     if (RemoveDirectoryA(path))
     {
         duk_push_true(ctx);
@@ -1908,7 +1919,7 @@ duk_ret_t CScriptInstance::js_FSReadDir(duk_context* ctx)
     const char* path = duk_get_string(ctx, 0);
 
     duk_pop_n(ctx, nargs);
-    
+
     WIN32_FIND_DATAA ffd;
     HANDLE hFind = FindFirstFileA(stdstr_f("%s%s", path, "\\*").c_str(), &ffd);
 
