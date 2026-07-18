@@ -510,18 +510,22 @@ bool CMainMenu::ProcessMessage(HWND hWnd, DWORD /*FromAccelerator*/, DWORD MenuI
     case ID_OPTIONS_CONFIG_RSP:
         WriteTrace(TraceUserInterface, TraceDebug, "ID_OPTIONS_CONFIG_RSP");
         g_Plugins->ConfigPlugin(hWnd, PLUGIN_TYPE_RSP);
+        m_Gui->RefreshProfilePresetIndex();
         break;
     case ID_OPTIONS_CONFIG_GFX:
         WriteTrace(TraceUserInterface, TraceDebug, "ID_OPTIONS_CONFIG_GFX");
         g_Plugins->ConfigPlugin(hWnd, PLUGIN_TYPE_GFX);
+        m_Gui->RefreshProfilePresetIndex();
         break;
     case ID_OPTIONS_CONFIG_AUDIO:
         WriteTrace(TraceUserInterface, TraceDebug, "ID_OPTIONS_CONFIG_AUDIO");
         g_Plugins->ConfigPlugin(hWnd, PLUGIN_TYPE_AUDIO);
+        m_Gui->RefreshProfilePresetIndex();
         break;
     case ID_OPTIONS_CONFIG_CONT:
         WriteTrace(TraceUserInterface, TraceDebug, "ID_OPTIONS_CONFIG_CONT");
         g_Plugins->ConfigPlugin(hWnd, PLUGIN_TYPE_CONTROLLER);
+        m_Gui->RefreshProfilePresetIndex();
         break;
     case ID_OPTIONS_CPU_USAGE:
         WriteTrace(TraceUserInterface, TraceDebug, "ID_OPTIONS_CPU_USAGE");
