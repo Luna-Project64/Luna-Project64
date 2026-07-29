@@ -336,6 +336,31 @@ void CSystemTimer::SaveData(CFile & file) const
     file.Write((void *)&m_Current, sizeof(m_Current));
 }
 
+void CSystemTimer::SaveData(MemoryState::TimerState& state) const
+{
+    memcpy(state.Detatils, m_TimerDetatils, sizeof(m_TimerDetatils));
+    state.LastUpdate = m_LastUpdate;
+    state.Next = m_NextTimer;
+    state.Current = m_Current;
+}
+
+void CSystemTimer::SaveData(zipFile& file, MemoryState::TimerState& state)
+{
+    static_assert(sizeof(state.Detatils) == sizeof(m_TimerDetatils), "TimerDetails size mismatch");
+    static_assert(sizeof(state.LastUpdate) == sizeof(m_LastUpdate), "LastUpdate size mismatch");
+    static_assert(sizeof(state.Next) == sizeof(m_NextTimer), "NextTimer size mismatch");
+    static_assert(sizeof(state.Current) == sizeof(m_Current), "Current size mismatch");
+
+    uint32_t TimerDetailsSize = sizeof(TIMER_DETAILS);
+    uint32_t Entries = sizeof(m_TimerDetatils) / sizeof(m_TimerDetatils[0]);
+    zipWriteInFileInZip(file, &TimerDetailsSize, sizeof(TimerDetailsSize));
+    zipWriteInFileInZip(file, &Entries, sizeof(Entries));
+    zipWriteInFileInZip(file, (void*)&state.Detatils, sizeof(m_TimerDetatils));
+    zipWriteInFileInZip(file, (void*)&state.LastUpdate, sizeof(m_LastUpdate));
+    zipWriteInFileInZip(file, &state.Next, sizeof(m_NextTimer));
+    zipWriteInFileInZip(file, (void*)&state.Current, sizeof(m_Current));
+}
+
 void CSystemTimer::LoadData(zipFile & file)
 {
     uint32_t TimerDetailsSize, Entries;
@@ -392,6 +417,14 @@ void CSystemTimer::LoadData(CFile & file)
     file.Read((void *)&m_LastUpdate, sizeof(m_LastUpdate));
     file.Read(&m_NextTimer, sizeof(m_NextTimer));
     file.Read((void *)&m_Current, sizeof(m_Current));
+}
+
+void CSystemTimer::LoadData(MemoryState::TimerState& state)
+{
+    memcpy(m_TimerDetatils, state.Detatils, sizeof(m_TimerDetatils));
+    m_LastUpdate = state.LastUpdate;
+    m_NextTimer = state.Next;
+    m_Current = (TimerType)state.Current;
 }
 
 void CSystemTimer::RecordDifference(CLog &LogFile, const CSystemTimer& rSystemTimer)

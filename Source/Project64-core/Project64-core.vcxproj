@@ -158,6 +158,7 @@
     </ClCompile>
     <ClCompile Include="..\..\RAInterface\RA_Interface.cpp" />
     <ClCompile Include="GDBServer.cpp" />
+    <ClCompile Include="MemoryState.cpp" />
     <ClCompile Include="Minidump.cpp" />
     <ClCompile Include="RetroAchievements.cpp" />
     <ClCompile Include="AppInit.cpp" />
@@ -263,6 +264,7 @@
     <ClInclude Include="3rdParty\zip.h" />
     <ClInclude Include="AppInit.h" />
     <ClInclude Include="CircularBuffer.h" />
+    <ClInclude Include="MemoryState.h" />
     <ClInclude Include="NumConv.h" />
     <ClInclude Include="Debugger.h" />
     <ClInclude Include="ExceptionHandler.h" />

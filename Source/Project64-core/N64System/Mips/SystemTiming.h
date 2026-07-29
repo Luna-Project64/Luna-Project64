@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Common/Log.h>
+#include <Project64-core/MemoryState.h>
 #include <Project64-core/N64System/N64Types.h>
 #include <Project64-core/N64System/Mips/Register.h>
 #include <Project64-core/3rdParty/zip.h>
@@ -49,8 +50,11 @@ public:
 
     void SaveData(zipFile & file) const;
     void SaveData(CFile & file) const;
+    void SaveData(MemoryState::TimerState&) const;
+    static void SaveData(zipFile& file, MemoryState::TimerState&);
     void LoadData(zipFile & file);
     void LoadData(CFile & file);
+    void LoadData(MemoryState::TimerState&);
 
     void RecordDifference(CLog &LogFile, const CSystemTimer& rSystemTimer);
 

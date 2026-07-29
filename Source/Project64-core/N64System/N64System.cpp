@@ -129,10 +129,22 @@ CN64System::CN64System(CPlugins * Plugins, uint32_t randomizer_seed, bool SavesR
     g_Enhancements->DisableIfNeeded();
 
     WriteTrace(TraceN64System, TraceDebug, "Done");
+
+    if (!RA_HasOnSaveState())
+    {
+        m_SaverThread = std::thread([this]() { this->StateSaverThread(); });
+    }
 }
 
 CN64System::~CN64System()
 {
+    if (!RA_HasOnSaveState())
+    {
+        std::lock_guard<std::mutex> lock(m_StatesMutex);
+        m_Active = false;
+    }
+    m_SaverCV.notify_one();
+
     SetActiveSystem(false);
     Transferpak::Release();
     if (m_SyncCPU)
@@ -156,6 +168,11 @@ CN64System::~CN64System()
         WriteTrace(TraceN64System, TraceDebug, "Deleting thread object");
         delete m_thread;
         m_thread = nullptr;
+    }
+
+    if (!RA_HasOnSaveState())
+    {
+        m_SaverThread.join();
     }
 }
 
@@ -1823,12 +1840,6 @@ bool CN64System::SaveState()
     CPath ZipFile(SaveFile);
     ZipFile.SetNameExtension(stdstr_f("%s.zip", ZipFile.GetNameExtension().c_str()).c_str());
 
-    // Make sure the target directory exists
-    if (!SaveFile.DirectoryExists())
-    {
-        SaveFile.DirectoryCreate();
-    }
-
     // Open the file
     if (g_Settings->LoadDword(Game_FuncLookupMode) == FuncFind_ChangeMemory)
     {
@@ -1843,62 +1854,138 @@ bool CN64System::SaveState()
     uint32_t NextViTimer = m_SystemTimer.GetTimer(CSystemTimer::ViTimer);
     if (g_Settings->LoadDword(Setting_AutoZipInstantSave))
     {
-        ZipFile.Delete();
-        zipFile file = zipOpen(ZipFile, 0);
-        zipOpenNewFileInZip(file, SaveFile.GetNameExtension().c_str(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_DEFAULT_COMPRESSION);
-        zipWriteInFileInZip(file, &SaveID_0, sizeof(SaveID_0));
-        zipWriteInFileInZip(file, &RdramSize, sizeof(uint32_t));
-        if (g_Settings->LoadBool(Setting_EnableDisk) && g_Disk)
+        if (!RA_HasOnSaveState())
         {
-            // Keep base ROM information (64DD IPL / compatible game ROM)
-            zipWriteInFileInZip(file, &g_Rom->GetRomAddress()[0x10], 0x20);
-            zipWriteInFileInZip(file, g_Disk->GetDiskAddressID(), 0x20);
+            auto state = std::make_shared<MemoryState>();
+
+            state->SaveID_0 = SaveID_0;
+            state->RdramSize = RdramSize;
+
+            if (g_Settings->LoadBool(Setting_EnableDisk) && g_Disk)
+            {
+                // Keep base ROM information (64DD IPL / compatible game ROM)
+                memcpy(state->RomData, &g_Rom->GetRomAddress()[0x10], 0x20);
+                memcpy(state->RomData + 0x20, g_Disk->GetDiskAddressID(), 0x20);
+            }
+            else
+            {
+                memcpy(state->RomData, g_Rom->GetRomAddress(), 0x40);
+            }
+            state->NextViTimer = NextViTimer;
+            state->ProgramCounter = m_Reg.m_PROGRAM_COUNTER;
+            memcpy(state->GPR, m_Reg.m_GPR, sizeof(int64_t) * 32);
+            memcpy(state->FPR, m_Reg.m_FPR, sizeof(int64_t) * 32);
+            memcpy(state->CP0, m_Reg.m_CP0, sizeof(uint32_t) * 32);
+            memcpy(state->FPCR, m_Reg.m_FPCR, sizeof(uint32_t) * 32);
+            state->HI = m_Reg.m_HI.DW;
+            state->LO = m_Reg.m_LO.DW;
+            memcpy(state->RDRAM_Registers, m_Reg.m_RDRAM_Registers, sizeof(uint32_t) * 10);
+            memcpy(state->SigProcessor_Interface, m_Reg.m_SigProcessor_Interface, sizeof(uint32_t) * 10);
+            memcpy(state->Display_ControlReg, m_Reg.m_Display_ControlReg, sizeof(uint32_t) * 10);
+            memcpy(state->Mips_Interface, m_Reg.m_Mips_Interface, sizeof(uint32_t) * 4);
+            memcpy(state->Video_Interface, m_Reg.m_Video_Interface, sizeof(uint32_t) * 14);
+            memcpy(state->Audio_Interface, m_Reg.m_Audio_Interface, sizeof(uint32_t) * 6);
+            memcpy(state->Peripheral_Interface, m_Reg.m_Peripheral_Interface, sizeof(uint32_t) * 13);
+            memcpy(state->RDRAM_Interface, m_Reg.m_RDRAM_Interface, sizeof(uint32_t) * 8);
+            memcpy(state->SerialInterface, m_Reg.m_SerialInterface, sizeof(uint32_t) * 4);
+            memcpy(state->TLB, (void* const)&m_TLB.TlbEntry(0), sizeof(CTLB::TLB_ENTRY) * 32);
+            memcpy(state->PifRam, m_MMU_VM.PifRam(), 0x40);
+            memcpy(state->Rdram, m_MMU_VM.Rdram(), RdramSize);
+            memcpy(state->Dmem, m_MMU_VM.Dmem(), 0x1000);
+            memcpy(state->Imem, m_MMU_VM.Imem(), 0x1000);
+
+            // Extra info v2
+            state->SaveID_2 = SaveID_2;
+
+            // Disk interface info
+            memcpy(state->DiskInterface, m_Reg.m_DiskInterface, sizeof(uint32_t) * 22);
+
+            // System timers info
+            m_SystemTimer.SaveData(state->TimerStat);
+
+            {
+                std::unique_lock<std::mutex> lck(m_StatesMutex);
+                bool notify = m_States.empty();
+                m_States[SaveFile] = { ExtraInfo, std::move(state) };
+                m_ThrollingCV.wait(lck, [this] { return m_States.size() < 10; });
+
+                if (notify)
+                {
+                    m_SaverCV.notify_one();
+                }
+            }
         }
         else
         {
-            zipWriteInFileInZip(file, g_Rom->GetRomAddress(), 0x40);
+            // Make sure the target directory exists
+            if (!SaveFile.DirectoryExists())
+            {
+                SaveFile.DirectoryCreate();
+            }
+
+            ZipFile.Delete();
+            zipFile file = zipOpen(ZipFile, 0);
+            zipOpenNewFileInZip(file, SaveFile.GetNameExtension().c_str(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_DEFAULT_COMPRESSION);
+            zipWriteInFileInZip(file, &SaveID_0, sizeof(SaveID_0));
+            zipWriteInFileInZip(file, &RdramSize, sizeof(uint32_t));
+            if (g_Settings->LoadBool(Setting_EnableDisk) && g_Disk)
+            {
+                // Keep base ROM information (64DD IPL / compatible game ROM)
+                zipWriteInFileInZip(file, &g_Rom->GetRomAddress()[0x10], 0x20);
+                zipWriteInFileInZip(file, g_Disk->GetDiskAddressID(), 0x20);
+            }
+            else
+            {
+                zipWriteInFileInZip(file, g_Rom->GetRomAddress(), 0x40);
+            }
+            zipWriteInFileInZip(file, &NextViTimer, sizeof(uint32_t));
+            zipWriteInFileInZip(file, &m_Reg.m_PROGRAM_COUNTER, sizeof(m_Reg.m_PROGRAM_COUNTER));
+            zipWriteInFileInZip(file, m_Reg.m_GPR, sizeof(int64_t) * 32);
+            zipWriteInFileInZip(file, m_Reg.m_FPR, sizeof(int64_t) * 32);
+            zipWriteInFileInZip(file, m_Reg.m_CP0, sizeof(uint32_t) * 32);
+            zipWriteInFileInZip(file, m_Reg.m_FPCR, sizeof(uint32_t) * 32);
+            zipWriteInFileInZip(file, &m_Reg.m_HI, sizeof(int64_t));
+            zipWriteInFileInZip(file, &m_Reg.m_LO, sizeof(int64_t));
+            zipWriteInFileInZip(file, m_Reg.m_RDRAM_Registers, sizeof(uint32_t) * 10);
+            zipWriteInFileInZip(file, m_Reg.m_SigProcessor_Interface, sizeof(uint32_t) * 10);
+            zipWriteInFileInZip(file, m_Reg.m_Display_ControlReg, sizeof(uint32_t) * 10);
+            zipWriteInFileInZip(file, m_Reg.m_Mips_Interface, sizeof(uint32_t) * 4);
+            zipWriteInFileInZip(file, m_Reg.m_Video_Interface, sizeof(uint32_t) * 14);
+            zipWriteInFileInZip(file, m_Reg.m_Audio_Interface, sizeof(uint32_t) * 6);
+            zipWriteInFileInZip(file, m_Reg.m_Peripheral_Interface, sizeof(uint32_t) * 13);
+            zipWriteInFileInZip(file, m_Reg.m_RDRAM_Interface, sizeof(uint32_t) * 8);
+            zipWriteInFileInZip(file, m_Reg.m_SerialInterface, sizeof(uint32_t) * 4);
+            zipWriteInFileInZip(file, (void* const)&m_TLB.TlbEntry(0), sizeof(CTLB::TLB_ENTRY) * 32);
+            zipWriteInFileInZip(file, m_MMU_VM.PifRam(), 0x40);
+            zipWriteInFileInZip(file, m_MMU_VM.Rdram(), RdramSize);
+            zipWriteInFileInZip(file, m_MMU_VM.Dmem(), 0x1000);
+            zipWriteInFileInZip(file, m_MMU_VM.Imem(), 0x1000);
+            zipCloseFileInZip(file);
+
+            zipOpenNewFileInZip(file, ExtraInfo.GetNameExtension().c_str(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_DEFAULT_COMPRESSION);
+
+            // Extra info v2
+            zipWriteInFileInZip(file, &SaveID_2, sizeof(SaveID_2));
+
+            // Disk interface info
+            zipWriteInFileInZip(file, m_Reg.m_DiskInterface, sizeof(uint32_t) * 22);
+
+            // System timers info
+            m_SystemTimer.SaveData(file);
+
+            zipCloseFileInZip(file);
+
+            zipClose(file, "");
         }
-        zipWriteInFileInZip(file, &NextViTimer, sizeof(uint32_t));
-        zipWriteInFileInZip(file, &m_Reg.m_PROGRAM_COUNTER, sizeof(m_Reg.m_PROGRAM_COUNTER));
-        zipWriteInFileInZip(file, m_Reg.m_GPR, sizeof(int64_t) * 32);
-        zipWriteInFileInZip(file, m_Reg.m_FPR, sizeof(int64_t) * 32);
-        zipWriteInFileInZip(file, m_Reg.m_CP0, sizeof(uint32_t) * 32);
-        zipWriteInFileInZip(file, m_Reg.m_FPCR, sizeof(uint32_t) * 32);
-        zipWriteInFileInZip(file, &m_Reg.m_HI, sizeof(int64_t));
-        zipWriteInFileInZip(file, &m_Reg.m_LO, sizeof(int64_t));
-        zipWriteInFileInZip(file, m_Reg.m_RDRAM_Registers, sizeof(uint32_t) * 10);
-        zipWriteInFileInZip(file, m_Reg.m_SigProcessor_Interface, sizeof(uint32_t) * 10);
-        zipWriteInFileInZip(file, m_Reg.m_Display_ControlReg, sizeof(uint32_t) * 10);
-        zipWriteInFileInZip(file, m_Reg.m_Mips_Interface, sizeof(uint32_t) * 4);
-        zipWriteInFileInZip(file, m_Reg.m_Video_Interface, sizeof(uint32_t) * 14);
-        zipWriteInFileInZip(file, m_Reg.m_Audio_Interface, sizeof(uint32_t) * 6);
-        zipWriteInFileInZip(file, m_Reg.m_Peripheral_Interface, sizeof(uint32_t) * 13);
-        zipWriteInFileInZip(file, m_Reg.m_RDRAM_Interface, sizeof(uint32_t) * 8);
-        zipWriteInFileInZip(file, m_Reg.m_SerialInterface, sizeof(uint32_t) * 4);
-        zipWriteInFileInZip(file, (void *const)&m_TLB.TlbEntry(0), sizeof(CTLB::TLB_ENTRY) * 32);
-        zipWriteInFileInZip(file, m_MMU_VM.PifRam(), 0x40);
-        zipWriteInFileInZip(file, m_MMU_VM.Rdram(), RdramSize);
-        zipWriteInFileInZip(file, m_MMU_VM.Dmem(), 0x1000);
-        zipWriteInFileInZip(file, m_MMU_VM.Imem(), 0x1000);
-        zipCloseFileInZip(file);
-
-        zipOpenNewFileInZip(file, ExtraInfo.GetNameExtension().c_str(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_DEFAULT_COMPRESSION);
-
-        // Extra info v2
-        zipWriteInFileInZip(file, &SaveID_2, sizeof(SaveID_2));
-
-        // Disk interface info
-        zipWriteInFileInZip(file, m_Reg.m_DiskInterface, sizeof(uint32_t) * 22);
-
-        // System timers info
-        m_SystemTimer.SaveData(file);
-
-        zipCloseFileInZip(file);
-
-        zipClose(file, "");
     }
     else
     {
+        // Make sure the target directory exists
+        if (!SaveFile.DirectoryExists())
+        {
+            SaveFile.DirectoryCreate();
+        }
+
         WriteTrace(TraceN64System, TraceDebug, "SaveFile: %s", (const char *)SaveFile);
         ExtraInfo.Delete();
         SaveFile.Delete();
@@ -2016,6 +2103,24 @@ bool CN64System::LoadState()
     CPath ZipFileName;
     ZipFileName = (const std::string &)FileName + ".zip";
 
+    std::shared_ptr<MemoryState> state;
+    {
+        std::lock_guard<std::mutex> lck(m_StatesMutex);
+        auto it = m_States.find(FileName);
+        if (it != m_States.end())
+        {
+            state = it->second.State;
+        }
+    }
+
+    if (state)
+    {
+        if (LoadState(ZipFileName, state))
+        {
+            return true;
+        }
+    }
+
     if (g_Settings->LoadDword(Setting_AutoZipInstantSave))
     {
         FileName = ZipFileName;
@@ -2052,6 +2157,136 @@ bool CN64System::LoadState()
         }
     }
     return Result;
+}
+
+bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
+{
+    HighResTimeStamp Start = m_Limiter.Now();
+
+    uint32_t SaveRDRAMSize, NextVITimer = 0, old_status, old_width, old_dacrate;
+    bool AudioResetOnLoad;
+    old_status = m_Reg.VI_STATUS_REG;
+    old_width = m_Reg.VI_WIDTH_REG;
+    old_dacrate = m_Reg.AI_DACRATE_REG;
+
+    {
+        Reset(false, true);
+
+        SaveRDRAMSize = state->RdramSize;
+        m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
+        m_MMU_VM.UnProtectMemory(0xA4000000, 0xA4001FFC);
+        g_Settings->SaveDword(Game_RDRamSize, SaveRDRAMSize);
+        NextVITimer = state->NextViTimer;
+        m_Reg.m_PROGRAM_COUNTER = state->ProgramCounter;
+        memcpy(m_Reg.m_GPR, state->GPR, sizeof(int64_t) * 32);
+        memcpy(m_Reg.m_FPR, state->FPR, sizeof(int64_t) * 32);
+        memcpy(m_Reg.m_CP0, state->CP0, sizeof(uint32_t) * 32);
+        memcpy(m_Reg.m_FPCR, state->FPCR, sizeof(uint32_t) * 32);
+        m_Reg.m_HI.DW = state->HI;
+        m_Reg.m_LO.DW = state->LO;
+        memcpy(m_Reg.m_RDRAM_Registers, state->RDRAM_Registers, sizeof(uint32_t) * 10);
+        memcpy(m_Reg.m_SigProcessor_Interface, state->SigProcessor_Interface, sizeof(uint32_t) * 10);
+        memcpy(m_Reg.m_Display_ControlReg, state->Display_ControlReg, sizeof(uint32_t) * 10);
+        memcpy(m_Reg.m_Mips_Interface, state->Mips_Interface, sizeof(uint32_t) * 4);
+        memcpy(m_Reg.m_Video_Interface, state->Video_Interface, sizeof(uint32_t) * 14);
+        memcpy(m_Reg.m_Audio_Interface, state->Audio_Interface, sizeof(uint32_t) * 6);
+        memcpy(m_Reg.m_Peripheral_Interface, state->Peripheral_Interface, sizeof(uint32_t) * 13);
+        memcpy(m_Reg.m_RDRAM_Interface, state->RDRAM_Interface, sizeof(uint32_t) * 8);
+        memcpy(m_Reg.m_SerialInterface, state->SerialInterface, sizeof(uint32_t) * 4);
+        memcpy((void* const)&m_TLB.TlbEntry(0), state->TLB, sizeof(CTLB::TLB_ENTRY) * 32);
+        memcpy(m_MMU_VM.PifRam(), state->PifRam, 0x40);
+        memcpy(m_MMU_VM.Rdram(), state->Rdram, SaveRDRAMSize);
+        memcpy(m_MMU_VM.Dmem(), state->Dmem, 0x1000);
+        memcpy(m_MMU_VM.Imem(), state->Imem, 0x1000);
+
+        // Extra info v1
+        // System timers info
+        m_SystemTimer.LoadData(state->TimerStat);
+
+        // Extra info v2 (Project64 2.4)
+        // Disk interface info
+        memcpy(m_Reg.m_DiskInterface, state->DiskInterface, sizeof(uint32_t) * 22);
+
+        // Recover disk seek address (if the save state is done while loading/saving data)
+        if (g_Disk)
+            DiskBMReadWrite(false);
+    }
+
+    // Fix losing audio in certain games with certain plugins
+    AudioResetOnLoad = g_Settings->LoadBool(Game_AudioResetOnLoad);
+    if (AudioResetOnLoad)
+    {
+        m_Reg.m_AudioIntrReg |= MI_INTR_AI;
+        m_Reg.AI_STATUS_REG &= ~AI_STATUS_FIFO_FULL;
+        m_Reg.MI_INTR_REG |= MI_INTR_AI;
+    }
+
+    if (bFixedAudio())
+    {
+        m_Audio.SetFrequency(m_Reg.AI_DACRATE_REG, SystemType());
+    }
+
+    if (old_status != m_Reg.VI_STATUS_REG)
+    {
+        g_Plugins->Gfx()->ViStatusChanged();
+    }
+
+    if (old_width != m_Reg.VI_WIDTH_REG)
+    {
+        g_Plugins->Gfx()->ViWidthChanged();
+    }
+    g_Plugins->Audio()->DacrateChanged(SystemType());
+
+    // Fix random register
+    while ((int)m_Reg.RANDOM_REGISTER < (int)m_Reg.WIRED_REGISTER)
+    {
+        m_Reg.RANDOM_REGISTER += 32 - m_Reg.WIRED_REGISTER;
+    }
+    // Fix up timer
+    m_SystemTimer.SetTimer(CSystemTimer::CompareTimer, m_Reg.COMPARE_REGISTER - m_Reg.COUNT_REGISTER, false);
+    m_SystemTimer.SetTimer(CSystemTimer::ViTimer, NextVITimer, false);
+    m_Reg.FixFpuLocations();
+    m_TLB.Reset(false);
+    if (m_Recomp)
+    {
+        m_Recomp->ResetFunctionTimes();
+    }
+    m_CPU_Usage.ResetTimers();
+    m_FPS.Reset(true);
+    if (bRecordRecompilerAsm())
+    {
+        Stop_Recompiler_Log();
+        Start_Recompiler_Log();
+    }
+
+#ifdef TEST_SP_TRACKING
+    m_CurrentSP = GPR[29].UW[0];
+#endif
+    if (bFastSP() && m_Recomp) { m_Recomp->ResetMemoryStackPos(); }
+
+    if (g_Settings->LoadDword(Game_CpuType) == CPU_SyncCores)
+    {
+        if (m_SyncCPU)
+        {
+            for (int i = 0; i < (sizeof(m_LastSuccessSyncPC) / sizeof(m_LastSuccessSyncPC[0])); i++)
+            {
+                m_LastSuccessSyncPC[i] = 0;
+            }
+            m_SyncCPU->SetActiveSystem(true);
+            m_SyncCPU->LoadState(path, state);
+            SetActiveSystem(true);
+            SyncCPU(m_SyncCPU);
+        }
+    }
+    std::string LoadMsg = g_Lang->GetString(MSG_LOADED_STATE);
+    g_Notify->DisplayMessage(3, stdstr_f("%s %s", LoadMsg.c_str(), stdstr(path.GetNameExtension()).c_str()).c_str());
+    WriteTrace(TraceN64System, TraceDebug, "Done");
+
+    HighResTimeStamp End = m_Limiter.Now();
+    m_Limiter.Reset();
+    m_Limiter.AdjustTime(End - Start);
+
+    return true;
 }
 
 bool CN64System::LoadState(const char * FileName)
@@ -2592,5 +2827,39 @@ void CN64System::TLB_Changed()
     if (g_Debugger)
     {
         g_Debugger->TLBChanged();
+    }
+}
+
+void CN64System::StateSaverThread()
+{
+    std::unique_lock<std::mutex> lck(m_StatesMutex);
+    while (true)
+    {
+        m_SaverCV.wait(lck, [this] { return !m_Active || !m_States.empty(); });
+        if (m_States.empty())
+        {
+            if (!m_Active)
+            {
+                break;
+            }
+
+            continue;
+        }
+
+        MemState StateInfo = m_States.begin()->second;
+        CPath SaveFile = m_States.begin()->first;
+
+        lck.unlock();
+        StateInfo.State->store(SaveFile, StateInfo.ExtraInfo);
+        lck.lock();
+
+        auto it = m_States.find(SaveFile);
+        if (it != m_States.end())
+        {
+            if (it->second.State == StateInfo.State)
+            {
+                m_States.erase(SaveFile);
+            }
+        }
     }
 }

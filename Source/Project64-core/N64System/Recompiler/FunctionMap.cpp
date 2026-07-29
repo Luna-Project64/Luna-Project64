@@ -41,7 +41,8 @@ bool CFunctionMap::AllocateMemory()
                 return false;
             }
         }
-        memset(m_JumpTable, 0, (RdramSize() >> 2) * sizeof(PCCompiledFunc));
+        uint32_t size = RdramSize();
+        memset(m_JumpTable, 0, (size >> 2) * sizeof(PCCompiledFunc));
     }
     WriteTrace(TraceRecompiler, TraceDebug, "Done");
     return true;

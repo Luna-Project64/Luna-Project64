@@ -384,6 +384,9 @@
     <ClCompile Include="Settings\SettingType\SettingsType-AppdataEnabled.cpp">
       <Filter>Source Files\Settings\SettingType</Filter>
     </ClCompile>
+    <ClCompile Include="MemoryState.cpp">
+      <Filter>Source Files\N64 System</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -736,6 +739,9 @@
     </ClInclude>
     <ClInclude Include="Settings\SettingType\SettingsType-AppdataEnabled.h">
       <Filter>Source Files\Settings\SettingType</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryState.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -73,6 +73,7 @@ public:
     static void ResumeRSP();
     bool   SaveState();
     bool   LoadState(const char * FileName);
+    bool   LoadState(CPath& file, std::shared_ptr<MemoryState> state);
     bool   LoadState();
 
     bool   DmaUsed() const { return m_DMAUsed; }
@@ -130,6 +131,8 @@ private:
     void TLB_Unmaped(uint32_t VAddr, uint32_t Len);
     void TLB_Changed();
 
+    void StateSaverThread();
+
     CPlugins      * const m_Plugins;  // The plugin container
     CPlugins      * m_SyncPlugins;
     CN64System    * m_SyncCPU;
@@ -177,4 +180,20 @@ private:
     const uint32_t SaveID_0 = 0x23D8A6C8;   // Main save state info (*.pj)
     const uint32_t SaveID_1 = 0x56D2CD23;   // Extra data v1 (system timing) info (*.dat)
     const uint32_t SaveID_2 = 0x750A6BEB;   // Extra data v2 (timing + disk registers) (*.dat)
+
+    struct MemState
+    {
+        CPath ExtraInfo;
+        std::shared_ptr<MemoryState> State;
+    };
+    std::mutex m_StatesMutex;
+    bool m_Active = true;
+    std::map<std::string, MemState> m_States;
+    std::thread m_SaverThread;
+
+    // invoked when there is any jobs to be written from m_States to disk
+    std::condition_variable m_SaverCV;
+
+    // invoked when there is too many jobs in m_States and the saver thread is busy writing to disk for throttling
+    std::condition_variable m_ThrollingCV;
 };

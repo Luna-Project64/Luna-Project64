@@ -9889,8 +9889,8 @@ bool CX86RecompilerOps::InheritParentInfo()
                         }
                         break;
                     default:
-                        CPU_Message("Unknown CPU state(%d) in InheritParentInfo", RegSet->GetMipsRegState(i2));
-                        g_Notify->BreakPoint(__FILE__, __LINE__);
+                        // CPU_Message("Unknown CPU state(%d) in InheritParentInfo", RegSet->GetMipsRegState(i2));
+                        // g_Notify->BreakPoint(__FILE__, __LINE__);
                         break;
                     }
                 }

@@ -76,7 +76,7 @@ LRESULT WelcomeScreen::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*l
     LvItem.pszText = "NRage";
     SendMessageA(hDlgItem, LVM_SETITEMA, 0, (LPARAM)&LvItem);
     LvItem.iSubItem = 1;
-    LvItem.pszText = "For DirectInput controllers";
+    LvItem.pszText = "For most controllers";
     SendMessageA(hDlgItem, LVM_SETITEMA, 0, (LPARAM)&LvItem);
 
     LvItem.iItem = 1;
@@ -92,7 +92,7 @@ LRESULT WelcomeScreen::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*l
     LvItem.pszText = "LINK's Mapper";
     SendMessageA(hDlgItem, LVM_SETITEMA, 0, (LPARAM)&LvItem);
     LvItem.iSubItem = 1;
-    LvItem.pszText = "For XInput controllers, no GUI";
+    LvItem.pszText = "For XInput controllers, basic GUI";
     SendMessageA(hDlgItem, LVM_SETITEMA, 0, (LPARAM)&LvItem);
 
     LvItem.iItem = 3;

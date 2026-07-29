@@ -198,6 +198,9 @@
     <ClCompile Include="arch\generic\slide_hash_c.c">
       <Filter>Source Files\Arch\generic</Filter>
     </ClCompile>
+    <ClCompile Include="arch\x86\adler32_sse42.c">
+      <Filter>Source Files\Arch\x86</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="adler32_p.h">

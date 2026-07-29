@@ -10,6 +10,7 @@
 #include <Common/WinEscape.h>
 
 #include "DarkModeUtils.h"
+#include "dwmapi.h"
 
 #ifdef RETROACHIEVEMENTS
 #include <Project64-core/RetroAchievements.h>
@@ -97,6 +98,27 @@ CMainGui::~CMainGui(void)
     WriteTrace(TraceUserInterface, TraceDebug, "Done");
 }
 
+static LRESULT CALLBACK RenderWndProc(const HWND hwnd, const UINT msg, const WPARAM wParam, const LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_CREATE:
+    {
+        if (hwnd)
+        {
+            // Remove rounded corners from the render window on Windows 11
+            // constexpr DWM_WINDOW_CORNER_PREFERENCE corner_preference = DWMWCP_DONOTROUND;
+            // DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner_preference, sizeof(corner_preference));
+        }
+        return DefWindowProc(hwnd, msg, wParam, lParam);
+    }
+    break;
+
+    default:
+        return DefWindowProc(hwnd, msg, wParam, lParam);
+    }
+}
+
 bool CMainGui::RegisterWinClass(void)
 {
     WNDCLASS wcl;
@@ -113,6 +135,20 @@ bool CMainGui::RegisterWinClass(void)
     wcl.lpszMenuName = nullptr;
     wcl.lpszClassName = L"LunaProject64";
     if (RegisterClass(&wcl) == 0) return false;
+
+    wcl.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+    wcl.cbClsExtra = 0;
+    wcl.cbWndExtra = 0;
+    wcl.hIcon = nullptr;
+    wcl.hCursor = nullptr;
+    wcl.hInstance = GetModuleHandle(nullptr);
+
+    wcl.lpfnWndProc = (WNDPROC)RenderWndProc;
+    wcl.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wcl.lpszMenuName = nullptr;
+    wcl.lpszClassName = L"LunaProject64Render";
+    if (RegisterClass(&wcl) == 0) return false;
+
     return true;
 }
 
