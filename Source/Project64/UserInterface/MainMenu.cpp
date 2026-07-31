@@ -747,7 +747,7 @@ bool CMainMenu::ProcessMessage(HWND hWnd, DWORD /*FromAccelerator*/, DWORD MenuI
     case ID_LUNA_CREATE_RENDER_HWND:
     {
         HWND* phwnd = (HWND*)lparam;
-        *phwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, L"LunaProject64Render", nullptr, WS_CHILD | WS_VISIBLE, 0, 0, 1280, 720, m_Gui->MainWindow(), NULL, GetModuleHandle(NULL), NULL);
+        *phwnd = CreateWindowExW(0, L"LunaProject64Render", nullptr, WS_CHILD | WS_VISIBLE, 0, 0, 1, 1, m_Gui->MainWindow(), NULL, GetModuleHandle(NULL), NULL);
     }
     break;
     case ID_LUNA_DESTROY_RENDER_HWND:
