@@ -113,7 +113,6 @@
       <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release-Clang|Win32'">/Gw -fmerge-all-constants -flto=thin -fsplit-lto-unit -fwhole-program-vtables -mssse3 /clang:-O3 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release-Clang|Win32'" />
-      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/d2archSSE42 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile>
       <CallingConvention Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">FastCall</CallingConvention>
