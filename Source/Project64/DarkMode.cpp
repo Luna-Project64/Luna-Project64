@@ -95,11 +95,20 @@ void allowDarkMode(HWND hWnd) {
         //SetThemeAppProperties(dwFlags);
 
         HMODULE hUxtheme = LoadLibraryExA("uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        ASSERT(hUxtheme);
+        if (!hUxtheme) {
+            throw std::runtime_error("Failed to load uxtheme.dll");
+        }
+
         SetPreferredAppMode = (fnSetPreferredAppMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
-        ASSERT(SetPreferredAppMode);
+        if (!SetPreferredAppMode) {
+            throw std::runtime_error("Failed to get SetPreferredAppMode function address");
+        }
+
         AllowDarkModeForWindow = (fnAllowDarkModeForWindow)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(133));
-        ASSERT(AllowDarkModeForWindow);
+        if (!AllowDarkModeForWindow) {
+            throw std::runtime_error("Failed to get AllowDarkModeForWindow function address");
+        }
+
         //SetPreferredAppMode(PreferredAppMode::AllowDark);
         SetPreferredAppMode(PreferredAppMode::ForceDark);
         //FreeLibrary(hUxtheme);

@@ -5,7 +5,6 @@
 #include <Project64-core/VersionLuna.h>
 #include "UserInterface/WelcomeScreen.h"
 #include "Settings/UISettings.h"
-#include "GitHubUpdater.h"
 
 #define MAX_PATH_LENGTH 1024
 
@@ -42,7 +41,6 @@ int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /
 
     try
     {
-        CheckUpdatesGitHub();
         AppInit(&Notify(), CPath(CPath::MODULE_DIRECTORY), __argc, __argv);
         setupExceptionFilters();
 
@@ -50,9 +48,7 @@ int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /
             try {
                 DarkModeEnter(DLL_PROCESS_ATTACH);
             }
-            catch (...) {
-                MessageBox(NULL, L"Dark mode isn't supported.", L"Dark theme error", MB_OK);
-            }
+            catch (...) { }
         }
 
         // Create the main window with menu

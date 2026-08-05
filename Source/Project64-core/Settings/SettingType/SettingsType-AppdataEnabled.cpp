@@ -7,7 +7,8 @@
 CSettingAppDataEnabledConfig::CSettingAppDataEnabledConfig(const char * path, const char * Name, bool DefaultValue) :
     m_DefaultStr(Name),
     m_DefaultValue(DefaultValue),
-	m_AppdataCfgPath(path, "disabled.cfg")
+    m_UserPath(path),
+	m_AppdataCfgPath(path, "enabled.cfg")
 {
 }
 
@@ -59,6 +60,7 @@ void CSettingAppDataEnabledConfig::Save(uint32_t Index, bool Value)
 {
     if (Value)
     {
+        CreateDirectoryA(m_UserPath.c_str(), nullptr);
         HANDLE hndl = CreateFileA(m_AppdataCfgPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 		CloseHandle(hndl);
     }

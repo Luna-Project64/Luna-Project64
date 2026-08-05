@@ -37,7 +37,7 @@ void RegisterUISettings (void)
     AddUISetting(Setting_InputDelay, new CSettingTypeApplication("Settings", "Input Delay", (uint32_t)0));
     AddUISetting(Setting_RetroAchievements, new CSettingTypeApplication("Settings", "RetroAchievements", (uint32_t)false));
 
-    AddUISetting(AppData_ConfigAppData, new CSettingAppDataEnabledConfig(g_Settings->LoadStringVal(Cmd_AppdataDirectoryReal).c_str(), "", 0));
+    AddUISetting(AppData_ConfigAppData, new CSettingAppDataEnabledConfig(g_Settings->LoadStringVal(Cmd_ConfigNearExeDirectory).c_str(), "", 0));
 
     // RDB settings
     AddUISetting(Rdb_Status, new CSettingTypeUserNoteDatabase("Status", "Unknown"));

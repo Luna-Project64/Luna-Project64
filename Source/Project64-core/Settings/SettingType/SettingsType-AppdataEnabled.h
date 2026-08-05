@@ -36,6 +36,7 @@ public:
 protected:
     const char * m_DefaultStr;
     const uint32_t m_DefaultValue;
+    std::string m_UserPath;
     CPath m_AppdataCfgPath;
 
 private:
