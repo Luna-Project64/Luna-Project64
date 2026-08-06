@@ -104,28 +104,33 @@ void CSettings::AddHowToHandleSetting(const char* BaseDirectory)
         appdataDisabled = CfgAppdataPath.Exists();
     }
 
+    // Command settings
+    AddHandler(Cmd_BaseDirectory, new CSettingTypeTempString(BaseDirectory));
+    AddHandler(Cmd_ConfigNearExeDirectory, new CSettingTypeTempString(localConfigDir));
+
+    const char* configDir;
+    if (appdataDisabled)
     {
-        CPath fu(static_cast<const char*>(LunaConfigAppdataPath), "I_choose_not_to_receive_future_fixes.txt");
+		localConfigDir.DirectoryCreate();
+        AddHandler(Cmd_AppdataDirectory, new CSettingTypeTempString(localConfigDir));
+        AddHandler(Cmd_PluginBaseDirectory, new CSettingTypePluginConfigDir(localConfigDir));
+        configDir = static_cast<const char*>(localConfigDir);
+    }
+    else
+    {
+        AddHandler(Cmd_AppdataDirectory, new CSettingTypeTempString(LunaConfigAppdataPath));
+        AddHandler(Cmd_PluginBaseDirectory, new CSettingTypePluginConfigDir(AppdataPath));
+        configDir = static_cast<const char*>(LunaConfigAppdataPath);
+	}
+
+    {
+        CPath fu(configDir, "I_choose_not_to_receive_future_fixes.txt");
         if (!fu.Exists())
         {
             CheckUpdatesGitHub();
         }
     }
 
-    // Command settings
-    AddHandler(Cmd_BaseDirectory, new CSettingTypeTempString(BaseDirectory));
-    AddHandler(Cmd_ConfigNearExeDirectory, new CSettingTypeTempString(localConfigDir));
-    if (appdataDisabled)
-    {
-		localConfigDir.DirectoryCreate();
-        AddHandler(Cmd_AppdataDirectory, new CSettingTypeTempString(localConfigDir));
-        AddHandler(Cmd_PluginBaseDirectory, new CSettingTypePluginConfigDir(localConfigDir));
-    }
-    else
-    {
-        AddHandler(Cmd_AppdataDirectory, new CSettingTypeTempString(LunaConfigAppdataPath));
-        AddHandler(Cmd_PluginBaseDirectory, new CSettingTypePluginConfigDir(AppdataPath));
-	}
     AddHandler(Cmd_ShowHelp, new CSettingTypeTempBool(false));
     AddHandler(Cmd_RomFile, new CSettingTypeTempString(""));
     AddHandler(Cmd_ComboDiskFile, new CSettingTypeTempString(""));
