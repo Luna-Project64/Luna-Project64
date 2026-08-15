@@ -19,6 +19,8 @@
 #include "FramePerSecond.h"
 #include "SpeedLimiter.h"
 
+#include <optional>
+
 typedef std::list<SystemEvent>   EVENT_LIST;
 
 typedef std::map<uint32_t, uint32_t> FUNC_CALLS;
@@ -189,7 +191,7 @@ private:
     std::mutex m_StatesMutex;
     bool m_Active = true;
     std::map<std::string, MemState> m_States;
-    std::thread m_SaverThread;
+    std::optional<std::thread> m_SaverThread;
 
     // invoked when there is any jobs to be written from m_States to disk
     std::condition_variable m_SaverCV;

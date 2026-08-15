@@ -50,26 +50,7 @@ static bool TranslateToMemProtect(int OsMemProtection, MEM_PROTECTION & memProte
 
 void* AllocateAddressSpace(size_t size, void* base_address)
 {
-    auto pVirtualAlloc2 = (decltype(&::VirtualAlloc2))GetProcAddress(GetModuleHandle(L"kernelbase"), "VirtualAlloc2");
-    if (!pVirtualAlloc2)
-        return VirtualAlloc(base_address, size, MEM_RESERVE | MEM_TOP_DOWN, PAGE_NOACCESS);
-
-    MEM_ADDRESS_REQUIREMENTS addressReqs = { 0 };
-    MEM_EXTENDED_PARAMETER param = { 0 };
-
-    addressReqs.LowestStartingAddress = 0;
-    addressReqs.HighestEndingAddress = (PVOID)(ULONG_PTR)0x7fffffff;
-    addressReqs.Alignment = 0;
-
-    param.Type = MemExtendedParameterAddressRequirements;
-    param.Pointer = &addressReqs;
-
-    return pVirtualAlloc2(
-        nullptr, nullptr,
-        size,
-        MEM_RESERVE | MEM_TOP_DOWN,
-        PAGE_NOACCESS,
-        &param, 1);
+    return VirtualAlloc(base_address, size, MEM_RESERVE | MEM_TOP_DOWN, PAGE_NOACCESS);
 }
 
 bool FreeAddressSpace(void* addr, size_t size)

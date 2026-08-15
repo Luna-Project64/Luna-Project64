@@ -24,6 +24,45 @@ uint32_t CMipsMemoryVM::RegModValue;
 bool IsLibDragon = false;
 uint8_t RamProducingEntropyBits = 0;
 
+bool ShadowRamEnabled = false;
+std::optional<std::thread> ShadowRamThread;
+std::atomic_bool ShadowRamThreadRunning = false;
+
+#define SHADOW_RAM_SIZE (0x800000)
+#define SHADOW_RAM_GAP (0x100000)
+#define SHADOW_RAM_OFFSET (SHADOW_RAM_SIZE + SHADOW_RAM_GAP)
+
+static void makeShadowRam(size_t ramSize, uint8_t* ram)
+{
+    if (ShadowRamThread)
+        return;
+
+    memcpy(ram - SHADOW_RAM_GAP, "Luna Shadow RAM", 16);
+    ShadowRamThreadRunning = true;
+    ShadowRamThread = std::thread([ramSize, ram]() {
+        while (ShadowRamThreadRunning)
+        {
+            memcpy(ram - SHADOW_RAM_OFFSET, ram, ramSize);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    });
+}
+
+static bool destroyShadowRam(void)
+{
+    if (ShadowRamThread)
+    {
+        ShadowRamThreadRunning = false;
+        ShadowRamThread->join();
+        ShadowRamThread.reset();
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 #pragma warning(disable:4355) // Disable 'this' : used in base member initializer list
 
 CMipsMemoryVM::CMipsMemoryVM(bool SavesReadOnly) :
@@ -105,34 +144,39 @@ void CMipsMemoryVM::Reset(bool /*EraseMemory*/)
 
 void CMipsMemoryVM::ReserveMemory()
 {
-    m_Reserve1 = (uint8_t *)AllocateAddressSpaceLow(0x20000000, (void *)g_Settings->LoadDword(Setting_FixedRdramAddress));
+    size_t ramOffset = ShadowRamEnabled ? SHADOW_RAM_OFFSET : 0;
+    m_Reserve1 = (uint8_t *)AllocateAddressSpaceLow(ramOffset + 0x20000000, (void *)g_Settings->LoadDword(Setting_FixedRdramAddress));
     m_Reserve2 = (uint8_t *)AllocateAddressSpaceLow(0x04002000);
 }
 
 void CMipsMemoryVM::FreeReservedMemory()
 {
+    size_t ramOffset = ShadowRamEnabled ? SHADOW_RAM_OFFSET : 0;
     if (m_Reserve1)
     {
-        FreeAddressSpace(m_Reserve1, 0x20000000);
+        FreeAddressSpace(m_Reserve1, ramOffset + 0x20000000);
         m_Reserve1 = nullptr;
     }
     if (m_Reserve2)
     {
-        FreeAddressSpace(m_Reserve2, 0x20000000);
+        FreeAddressSpace(m_Reserve2, 0x04002000);
         m_Reserve2 = nullptr;
     }
 }
 
 bool CMipsMemoryVM::Initialize(bool SyncSystem)
 {
+    size_t ramOffset = ShadowRamEnabled ? SHADOW_RAM_OFFSET : 0;
     if (m_RDRAM != nullptr)
     {
         return true;
     }
 
+    bool wantShadowRam = false;
     if (!SyncSystem && m_RDRAM == nullptr && m_Reserve1 != nullptr)
     {
-        m_RDRAM = m_Reserve1;
+        m_RDRAM = m_Reserve1 + ramOffset;
+        wantShadowRam = ShadowRamEnabled;
         m_Reserve1 = nullptr;
     }
     if (SyncSystem && m_RDRAM == nullptr && m_Reserve2 != nullptr)
@@ -152,11 +196,16 @@ bool CMipsMemoryVM::Initialize(bool SyncSystem)
     }
 
     m_AllocatedRdramSize = g_Settings->LoadDword(Game_RDRamSize);
-    if (CommitMemory(m_RDRAM, m_AllocatedRdramSize, MEM_READWRITE) == nullptr)
+    if (CommitMemory(m_RDRAM - ramOffset, m_AllocatedRdramSize + ramOffset, MEM_READWRITE) == nullptr)
     {
         WriteTrace(TraceN64System, TraceError, "Failed to allocate RDRAM (Size: 0x%X)", m_AllocatedRdramSize);
         FreeMemory();
         return false;
+    }
+
+    if (wantShadowRam)
+    {
+        makeShadowRam(m_AllocatedRdramSize, m_RDRAM);
     }
 
     if (CommitMemory(m_RDRAM + 0x04000000, 0x2000, MEM_READWRITE) == nullptr)
@@ -229,11 +278,12 @@ void CMipsMemoryVM::FreeMemory()
 {
     if (m_RDRAM)
     {
-        if (DecommitMemory(m_RDRAM, 0x20000000))
+        size_t ramOffset = destroyShadowRam() ? SHADOW_RAM_OFFSET : 0;
+        if (DecommitMemory(m_RDRAM - ramOffset, 0x20000000 + ramOffset))
         {
             if (m_Reserve1 == nullptr)
             {
-                m_Reserve1 = m_RDRAM;
+                m_Reserve1 = m_RDRAM - ramOffset;
             }
             else if (m_Reserve2 == nullptr)
             {
@@ -1043,6 +1093,9 @@ void CALL CMipsMemoryVM::RdramChanged(CMipsMemoryVM * _this)
     {
         return;
     }
+
+    destroyShadowRam();
+
     if (old_size > new_size)
     {
         DecommitMemory(_this->m_RDRAM + new_size, old_size - new_size);
@@ -1062,6 +1115,8 @@ void CALL CMipsMemoryVM::RdramChanged(CMipsMemoryVM * _this)
         g_Notify->BreakPoint(__FILE__, __LINE__);
     } // However, FFFFFFFF also is a limit to RCP addressing, so we care
     _this->m_AllocatedRdramSize = (uint32_t)new_size;
+
+    makeShadowRam(_this->m_AllocatedRdramSize, _this->m_RDRAM);
 }
 
 void CMipsMemoryVM::ChangeSpStatus()

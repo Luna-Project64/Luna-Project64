@@ -138,7 +138,7 @@ CN64System::CN64System(CPlugins * Plugins, uint32_t randomizer_seed, bool SavesR
 
 CN64System::~CN64System()
 {
-    if (!RA_HasOnSaveState())
+    if (m_SaverThread)
     {
         std::lock_guard<std::mutex> lock(m_StatesMutex);
         m_Active = false;
@@ -170,9 +170,9 @@ CN64System::~CN64System()
         m_thread = nullptr;
     }
 
-    if (!RA_HasOnSaveState())
+    if (m_SaverThread)
     {
-        m_SaverThread.join();
+        m_SaverThread->join();
     }
 }
 

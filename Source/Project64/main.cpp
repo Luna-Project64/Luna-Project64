@@ -21,6 +21,8 @@ extern "C" {
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+extern bool ShadowRamEnabled;
+
 int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /*lpszArgs*/, int /*nWinMode*/)
 {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -60,7 +62,10 @@ int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /
 #ifdef RETROACHIEVEMENTS
         bool raInitAsync = true;
         if (g_Settings->LoadBool((SettingID)Setting_RetroAchievements))
+        {
             RA_Init(reinterpret_cast<HWND>(MainWindow.GetWindowHandle()));
+            ShadowRamEnabled = true;
+        }
 #endif
 
         CMainMenu MainMenu(&MainWindow, profileManager);
