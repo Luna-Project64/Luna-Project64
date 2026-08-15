@@ -25,12 +25,28 @@ bool IsLibDragon = false;
 uint8_t RamProducingEntropyBits = 0;
 
 bool ShadowRamEnabled = false;
-std::optional<std::thread> ShadowRamThread;
-std::atomic_bool ShadowRamThreadRunning = false;
+static std::optional<std::thread> ShadowRamThread;
+static std::atomic_bool ShadowRamThreadRunning = false;
+static uint32_t* ShadowRamAdvertiseAddress = nullptr;
+static bool IsHardcodeMode = false;
 
 #define SHADOW_RAM_SIZE (0x800000)
 #define SHADOW_RAM_GAP (0x100000)
 #define SHADOW_RAM_OFFSET (SHADOW_RAM_SIZE + SHADOW_RAM_GAP)
+
+static void AdvertiseHardcore()
+{
+    if (ShadowRamAdvertiseAddress)
+    {
+        *ShadowRamAdvertiseAddress = IsHardcodeMode ? 'HRCR' : 'SFTC';
+    }
+}
+
+void NotifyHardcore(bool hc)
+{
+    IsHardcodeMode = hc;
+    AdvertiseHardcore();
+}
 
 static void makeShadowRam(size_t ramSize, uint8_t* ram)
 {
@@ -38,12 +54,15 @@ static void makeShadowRam(size_t ramSize, uint8_t* ram)
         return;
 
     memcpy(ram - SHADOW_RAM_GAP, "Luna Shadow RAM", 16);
+    ShadowRamAdvertiseAddress = (uint32_t*)(ram - SHADOW_RAM_GAP + 0x10);
+    AdvertiseHardcore();
+
     ShadowRamThreadRunning = true;
     ShadowRamThread = std::thread([ramSize, ram]() {
         while (ShadowRamThreadRunning)
         {
             memcpy(ram - SHADOW_RAM_OFFSET, ram, ramSize);
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
         }
     });
 }
@@ -55,6 +74,7 @@ static bool destroyShadowRam(void)
         ShadowRamThreadRunning = false;
         ShadowRamThread->join();
         ShadowRamThread.reset();
+        ShadowRamAdvertiseAddress = nullptr;
         return true;
     }
     else
@@ -186,10 +206,6 @@ bool CMipsMemoryVM::Initialize(bool SyncSystem)
     }
     if (m_RDRAM == nullptr)
     {
-        m_RDRAM = (uint8_t *)AllocateAddressSpaceLow(0x20000000);
-    }
-    if (m_RDRAM == nullptr)
-    {
         WriteTrace(TraceN64System, TraceError, "Failed to reserve RDRAM (Size: 0x%X)", 0x20000000);
         FreeMemory();
         return false;
@@ -202,6 +218,7 @@ bool CMipsMemoryVM::Initialize(bool SyncSystem)
         FreeMemory();
         return false;
     }
+    m_RdramCommitedMemory = { m_RDRAM - ramOffset, m_AllocatedRdramSize + ramOffset };
 
     if (wantShadowRam)
     {
@@ -214,6 +231,7 @@ bool CMipsMemoryVM::Initialize(bool SyncSystem)
         FreeMemory();
         return false;
     }
+    m_CommitedMemoryList.push_back({ m_RDRAM + 0x04000000, 0x2000 });
 
     m_DMEM = (uint8_t *)(m_RDRAM + 0x04000000);
     m_IMEM = (uint8_t *)(m_RDRAM + 0x04001000);
@@ -229,6 +247,7 @@ bool CMipsMemoryVM::Initialize(bool SyncSystem)
             FreeMemory();
             return false;
         }
+        m_CommitedMemoryList.push_back({ m_Rom, g_Rom->GetRomSize() });
         memcpy(m_Rom, g_Rom->GetRomAddress(), g_Rom->GetRomSize());
 
         ::ProtectMemory(m_Rom, g_Rom->GetRomSize(), MEM_READONLY);
@@ -254,6 +273,7 @@ bool CMipsMemoryVM::Initialize(bool SyncSystem)
                 FreeMemory();
                 return false;
             }
+            m_CommitedMemoryList.push_back({ m_DDRom, g_DDRom->GetRomSize() });
             memcpy(m_DDRom, g_DDRom->GetRomAddress(), g_DDRom->GetRomSize());
 
             ::ProtectMemory(m_DDRom, g_DDRom->GetRomSize(), MEM_READONLY);
@@ -279,24 +299,42 @@ void CMipsMemoryVM::FreeMemory()
     if (m_RDRAM)
     {
         size_t ramOffset = destroyShadowRam() ? SHADOW_RAM_OFFSET : 0;
-        if (DecommitMemory(m_RDRAM - ramOffset, 0x20000000 + ramOffset))
+
+        if (m_RdramCommitedMemory)
         {
-            if (m_Reserve1 == nullptr)
+            if (!DecommitMemory(m_RdramCommitedMemory->Address, m_RdramCommitedMemory->Size))
             {
-                m_Reserve1 = m_RDRAM - ramOffset;
+                DWORD err = GetLastError();
+                char line[256];
+                sprintf(line, "Failed to decommit RDRAM %d\n", err);
+                OutputDebugStringA(line);
             }
-            else if (m_Reserve2 == nullptr)
+            m_RdramCommitedMemory.reset();
+        }
+
+        for (const auto& mem : m_CommitedMemoryList)
+        {
+            if (!DecommitMemory(mem.Address, mem.Size))
             {
-                m_Reserve2 = m_RDRAM;
+                DWORD err = GetLastError();
+                char line[256];
+                sprintf(line, "Failed to decommit memory %d\n", err);
+                OutputDebugStringA(line);
             }
-            else
-            {
-                FreeAddressSpace(m_RDRAM, 0x20000000);
-            }
+        }
+        m_CommitedMemoryList.clear();
+
+        if (m_Reserve1 == nullptr)
+        {
+            m_Reserve1 = m_RDRAM - ramOffset;
+        }
+        else if (m_Reserve2 == nullptr)
+        {
+            m_Reserve2 = m_RDRAM;
         }
         else
         {
-            FreeAddressSpace(m_RDRAM, 0x20000000);
+            g_Notify->DisplayError("Failed to find how to deallocate RDRAM, both reserved memory blocks are already used.");
         }
         m_RDRAM = nullptr;
         m_IMEM = nullptr;
@@ -1094,20 +1132,26 @@ void CALL CMipsMemoryVM::RdramChanged(CMipsMemoryVM * _this)
         return;
     }
 
-    destroyShadowRam();
-
-    if (old_size > new_size)
+    bool hasShadow = destroyShadowRam();
+        
+    if (_this->m_RdramCommitedMemory)
     {
-        DecommitMemory(_this->m_RDRAM + new_size, old_size - new_size);
-    }
-    else
-    {
-        void * result = CommitMemory(_this->m_RDRAM + old_size, new_size - old_size, MEM_READWRITE);
-        if (result == nullptr)
+        if (old_size > new_size)
         {
-            WriteTrace(TraceN64System, TraceError, "Failed to allocate extended memory");
-            g_Notify->FatalError(GS(MSG_MEM_ALLOC_ERROR));
+            DecommitMemory(_this->m_RDRAM + new_size, old_size - new_size);
         }
+        else
+        {
+            void * result = CommitMemory(_this->m_RDRAM + old_size, new_size - old_size, MEM_READWRITE);
+            if (result == nullptr)
+            {
+                WriteTrace(TraceN64System, TraceError, "Failed to allocate extended memory");
+                g_Notify->FatalError(GS(MSG_MEM_ALLOC_ERROR));
+            }
+        }
+
+        _this->m_RdramCommitedMemory->Size -= old_size;
+        _this->m_RdramCommitedMemory->Size += new_size;
     }
 
     if (new_size > 0xFFFFFFFFul)
@@ -1116,7 +1160,8 @@ void CALL CMipsMemoryVM::RdramChanged(CMipsMemoryVM * _this)
     } // However, FFFFFFFF also is a limit to RCP addressing, so we care
     _this->m_AllocatedRdramSize = (uint32_t)new_size;
 
-    makeShadowRam(_this->m_AllocatedRdramSize, _this->m_RDRAM);
+    if (hasShadow)
+        makeShadowRam(_this->m_AllocatedRdramSize, _this->m_RDRAM);
 }
 
 void CMipsMemoryVM::ChangeSpStatus()

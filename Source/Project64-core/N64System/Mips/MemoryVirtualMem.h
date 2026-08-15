@@ -8,6 +8,9 @@
 #include <Project64-core/N64System/Mips/Sram.h>
 #include <Project64-core/N64System/Mips/Dma.h>
 
+#include <optional>
+#include <vector>
+
 #ifdef __arm__
 #include <sys/ucontext.h>
 #endif
@@ -209,6 +212,14 @@ private:
     static uint8_t   * m_Reserve1, *m_Reserve2;
     uint8_t          * m_RDRAM, *m_DMEM, *m_IMEM;
     uint32_t         m_AllocatedRdramSize;
+
+    struct CommitedMemory
+    {
+        uint8_t * Address;
+        size_t Size;
+    };
+    std::vector<CommitedMemory> m_CommitedMemoryList;
+    std::optional<CommitedMemory> m_RdramCommitedMemory;
 
     // ROM information
     bool          m_RomMapped;

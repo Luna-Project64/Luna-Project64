@@ -45,8 +45,11 @@ static int __cdecl GetMenuItemIndex(HMENU hMenu, const char* pItemName)
     return -1;
 }
 
+extern void NotifyHardcore(bool hc);
 void RA_RebuildMenu()
 {
+    NotifyHardcore(RA_HardcoreModeIsActive() != 0);
+
     HMENU hMainMenu = GetMenu(g_hWnd);
     if (!hMainMenu)
         return;
