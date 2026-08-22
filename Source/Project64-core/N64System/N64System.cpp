@@ -1905,10 +1905,10 @@ bool CN64System::SaveState()
 
             {
                 std::unique_lock<std::mutex> lck(m_StatesMutex);
-                bool notify = m_States.empty();
-                m_States[SaveFile] = { ExtraInfo, std::move(state) };
                 m_ThrollingCV.wait(lck, [this] { return m_States.size() < 10; });
 
+                bool notify = m_States.empty();
+                m_States[SaveFile] = { ExtraInfo, std::move(state) };
                 if (notify)
                 {
                     m_SaverCV.notify_one();
@@ -2859,6 +2859,7 @@ void CN64System::StateSaverThread()
             if (it->second.State == StateInfo.State)
             {
                 m_States.erase(SaveFile);
+                m_ThrollingCV.notify_one();
             }
         }
     }

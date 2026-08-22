@@ -16,6 +16,9 @@ void MemoryState::store(CPath& SaveFile, const CPath& ExtraInfo)
 
     ZipFile.Delete();
     zipFile file = zipOpen(ZipFile, 0);
+    if (!file)
+        return;
+
     zipOpenNewFileInZip(file, SaveFile.GetNameExtension().c_str(), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_DEFAULT_COMPRESSION);
     zipWriteInFileInZip(file, &SaveID_0, sizeof(SaveID_0));
     zipWriteInFileInZip(file, &RdramSize, sizeof(uint32_t));
@@ -36,7 +39,7 @@ void MemoryState::store(CPath& SaveFile, const CPath& ExtraInfo)
     zipWriteInFileInZip(file, Audio_Interface, sizeof(uint32_t) * 6);
     zipWriteInFileInZip(file, Peripheral_Interface, sizeof(uint32_t) * 13);
     zipWriteInFileInZip(file, RDRAM_Interface, sizeof(uint32_t) * 8);
-    zipWriteInFileInZip(file, SigProcessor_Interface, sizeof(uint32_t) * 4);
+    zipWriteInFileInZip(file, SerialInterface, sizeof(uint32_t) * 4);
     zipWriteInFileInZip(file, TLB, sizeof(CTLB::TLB_ENTRY) * 32);
     zipWriteInFileInZip(file, PifRam, 0x40);
     zipWriteInFileInZip(file, Rdram, RdramSize);
