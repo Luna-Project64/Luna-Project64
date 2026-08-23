@@ -10,6 +10,13 @@
 
 #include <sstream>
 
+#ifndef HDM_SETBKCOLOR
+#define HDM_SETBKCOLOR (HDM_FIRST + 9)
+#endif
+#ifndef HDM_SETTEXTCOLOR
+#define HDM_SETTEXTCOLOR (HDM_FIRST + 9)
+#endif
+
 int WM_NCACTIVATE_cnt = 0;
 int WM_THEMECHANGED_cnt = 0;
 int WM_UAHDRAWMENU_cnt = 0;
@@ -83,18 +90,17 @@ void allowDarkMode(HWND hWnd) {
         ForceLight,
         Max
     };
-    using fnShouldAppsUseDarkMode = bool (WINAPI*)(); // ordinal 132
     using fnAllowDarkModeForWindow = bool (WINAPI*)(HWND hWnd, bool allow); // ordinal 133
     using fnSetPreferredAppMode = PreferredAppMode(WINAPI*)(PreferredAppMode appMode); // ordinal 135, in 1903
-    fnSetPreferredAppMode SetPreferredAppMode;
-    fnAllowDarkModeForWindow AllowDarkModeForWindow;
+    static fnSetPreferredAppMode SetPreferredAppMode = nullptr;
+    static fnAllowDarkModeForWindow AllowDarkModeForWindow = nullptr;
 
     if (!hUxtheme) {
         //DWORD dwFlags = (STAP_ALLOW_NONCLIENT |
         //    STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT);
         //SetThemeAppProperties(dwFlags);
 
-        HMODULE hUxtheme = LoadLibraryExA("uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        hUxtheme = LoadLibraryExA("uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!hUxtheme) {
             throw std::runtime_error("Failed to load uxtheme.dll");
         }
@@ -114,7 +120,7 @@ void allowDarkMode(HWND hWnd) {
         //FreeLibrary(hUxtheme);
     }
 
-    if (hUxtheme && hWnd) {
+    if (hUxtheme && hWnd && AllowDarkModeForWindow) {
         //SetWindowTheme(hWnd, L"wstr", L"wstr");
         //SetWindowTheme(hWnd, L"DarkMode_Explorer", NULL);
         SetWindowTheme(hWnd, L"Explorer", NULL);
@@ -182,6 +188,7 @@ struct StackString
 
 static StackString getClass(HWND hwnd) {
     StackString str;
+    str.buf[0] = 0;
     GetClassName(hwnd, str.buf, sizeof(str.buf) / sizeof(*str.buf));
     return str;
 }
@@ -206,8 +213,12 @@ static bool needsToBePatched(HWND hwnd)
     return isProject64(wndName)
         || wndName == L"#32770"
         || wndName == L"Button"
+        || wndName == L"Edit"
         || wndName == L"tooltips_class32"
         || wndName == L"ComboBox"
+        || wndName == L"ComboLBox"
+        || wndName == L"ListBox"
+        || wndName == L"SysHeader32"
         // pick some widgets that aren't theme-able and leave the others alone
         || (wndName == L"SysListView32" && (style & WS_CHILDWINDOW))
         || (wndName == L"SysTreeView32" && (style & WS_CHILDWINDOW));
@@ -453,16 +464,25 @@ LRESULT CALLBACK CallWndSubClassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     }
     case WM_CTLCOLORBTN:
     {
-        break;
+        HDC hdc = reinterpret_cast<HDC>(wParam);
+        SetTextColor(hdc, load_config()->menubar_textcolor);
+        SetBkColor(hdc, load_config()->menubar_bgcolor);
+        SetBkMode(hdc, TRANSPARENT);
+        return reinterpret_cast<LRESULT>(load_config()->menubar_bgbrush);
     }
     case WM_CTLCOLORDLG:
     {
         HDC hdc = (HDC)wParam;
-        HWND dialog = (HWND)lParam;
-        auto name = getClass(dialog);
-        if (!isProject64(name))
-            return (INT_PTR)load_config()->menubar_bgcolor;
-        break;
+        SetTextColor(hdc, load_config()->menubar_textcolor);
+        SetBkColor(hdc, load_config()->menubar_bgcolor);
+        return reinterpret_cast<LRESULT>(load_config()->menubar_bgbrush);
+    }
+    case WM_CTLCOLORMSGBOX:
+    {
+        HDC hdc = reinterpret_cast<HDC>(wParam);
+        SetTextColor(hdc, load_config()->menubar_textcolor);
+        SetBkColor(hdc, load_config()->menubar_bgcolor);
+        return reinterpret_cast<LRESULT>(load_config()->menubar_bgbrush);
     }
     case WM_CTLCOLOREDIT:
     {
@@ -473,20 +493,14 @@ LRESULT CALLBACK CallWndSubClassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     }
     case WM_CTLCOLORLISTBOX:
     {
-        auto name = getClass(hWnd);
-        if (name == L"ComboBox") {
-            COMBOBOXINFO info;
-            info.cbSize = sizeof(info);
-            SendMessage(hWnd, CB_GETCOMBOBOXINFO, 0, (LPARAM)&info);
-
-            if ((HWND)lParam == info.hwndList)
-            {
-                HDC dc = (HDC)wParam;
-                SetBkMode(dc, OPAQUE);
-                SetTextColor(dc, load_config()->menubar_textcolor);
-                SetBkColor(dc, load_config()->menubar_bgcolor);
-                return (LRESULT)load_config()->menubar_bgbrush;
-            }
+        HWND listWnd = reinterpret_cast<HWND>(lParam);
+        auto listClass = getClass(listWnd);
+        if (listClass == L"ComboLBox" || listClass == L"ListBox") {
+            HDC dc = reinterpret_cast<HDC>(wParam);
+            SetBkMode(dc, OPAQUE);
+            SetTextColor(dc, load_config()->menubar_textcolor);
+            SetBkColor(dc, load_config()->menubar_bgcolor);
+            return reinterpret_cast<LRESULT>(load_config()->menubar_bgbrush);
         }
         break;
     }
@@ -574,9 +588,19 @@ LRESULT CALLBACK CallWndSubClassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         if (name == L"ComboBox") {
             SetWindowTheme(hWnd, L"wstr", L"wstr");
         }
+        if (name == L"Edit") {
+            SetWindowTheme(hWnd, L"wstr", L"wstr");
+        }
         if (name == L"SysListView32") {
-			SetWindowTheme(hWnd, L"ItemsView", nullptr); // DarkMode
+			if (FAILED(SetWindowTheme(hWnd, L"DarkMode_Explorer", nullptr))) {
+				SetWindowTheme(hWnd, L"Explorer", nullptr);
+			}
 		}
+        if (name == L"SysHeader32") {
+            if (FAILED(SetWindowTheme(hWnd, L"DarkMode_Explorer", nullptr))) {
+                SetWindowTheme(hWnd, L"Explorer", nullptr);
+            }
+        }
         if (name == L"Button") {
             LONG_PTR style = GetWindowLongPtr(hWnd, GWL_STYLE);
             switch (LOWORD(style)) {
@@ -611,6 +635,87 @@ LRESULT CALLBACK CallWndSubClassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     }
     case WM_NOTIFY:
     {
+        LPNMHDR pnmh = reinterpret_cast<LPNMHDR>(lParam);
+        if (pnmh != nullptr && pnmh->code == NM_CUSTOMDRAW)
+        {
+            auto ctrlClass = getClass(pnmh->hwndFrom);
+            if (ctrlClass == L"SysListView32")
+            {
+                LPNMLVCUSTOMDRAW pcd = reinterpret_cast<LPNMLVCUSTOMDRAW>(lParam);
+                switch (pcd->nmcd.dwDrawStage)
+                {
+                case CDDS_PREPAINT:
+                    return CDRF_NOTIFYITEMDRAW;
+                case CDDS_ITEMPREPAINT:
+                    pcd->clrText = load_config()->menubar_textcolor;
+                    pcd->clrTextBk = load_config()->menubar_bgcolor;
+                    return CDRF_NOTIFYSUBITEMDRAW;
+                case (CDDS_ITEMPREPAINT | CDDS_SUBITEM):
+                    pcd->clrText = load_config()->menubar_textcolor;
+                    pcd->clrTextBk = load_config()->menubar_bgcolor;
+                    return CDRF_NEWFONT;
+                default:
+                    break;
+                }
+            }
+            else if (ctrlClass == L"SysHeader32")
+            {
+                LPNMCUSTOMDRAW pcd = reinterpret_cast<LPNMCUSTOMDRAW>(lParam);
+                switch (pcd->dwDrawStage)
+                {
+                case CDDS_PREPAINT:
+                {
+                    RECT rcClient{};
+                    GetClientRect(pnmh->hwndFrom, &rcClient);
+                    FillRect(pcd->hdc, &rcClient, load_config()->menubar_bgbrush);
+                    return CDRF_NOTIFYITEMDRAW;
+                }
+                case CDDS_ITEMPREPAINT:
+                {
+                    SetTextColor(pcd->hdc, load_config()->menubar_textcolor);
+                    SetBkColor(pcd->hdc, load_config()->menubar_bgcolor);
+                    FillRect(pcd->hdc, &pcd->rc, load_config()->menubar_bgbrush);
+
+                    const int itemIndex = static_cast<int>(pcd->dwItemSpec);
+                    wchar_t text[256] = { 0 };
+                    HDITEM item{};
+                    item.mask = HDI_TEXT | HDI_FORMAT;
+                    item.pszText = text;
+                    item.cchTextMax = _countof(text) - 1;
+
+                    if (Header_GetItem(pnmh->hwndFrom, itemIndex, &item)) {
+                        RECT rcText = pcd->rc;
+                        InflateRect(&rcText, -6, 0);
+
+                        UINT format = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
+                        if (item.fmt & HDF_RIGHT) {
+                            format |= DT_RIGHT;
+                        }
+                        else if (item.fmt & HDF_CENTER) {
+                            format |= DT_CENTER;
+                        }
+                        else {
+                            format |= DT_LEFT;
+                        }
+
+                        SetBkMode(pcd->hdc, TRANSPARENT);
+                        DrawText(pcd->hdc, text, -1, &rcText, format);
+                    }
+
+                    // Vertical separator between header cells.
+                    POINT edge[] = {
+                        { pcd->rc.right - 1, pcd->rc.top + 1 },
+                        { pcd->rc.right - 1, pcd->rc.bottom - 2 }
+                    };
+                    Polyline(pcd->hdc, edge, _countof(edge));
+
+                    return CDRF_SKIPDEFAULT;
+                }
+                default:
+                    break;
+                }
+            }
+        }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
     case WM_PAINT:
@@ -628,6 +733,16 @@ LRESULT CALLBACK CallWndSubClassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             ListView_SetBkColor(hWnd, load_config()->menubar_bgcolor);
             ListView_SetTextBkColor(hWnd, load_config()->menubar_bgcolor);
             ListView_SetTextColor(hWnd, load_config()->menubar_textcolor);
+
+            HWND header = ListView_GetHeader(hWnd);
+            if (header) {
+                SendMessage(header, HDM_SETBKCOLOR, 0, load_config()->menubar_bgcolor);
+                SendMessage(header, HDM_SETTEXTCOLOR, 0, load_config()->menubar_textcolor);
+            }
+        }
+        else if (name == L"SysHeader32") {
+            SendMessage(hWnd, HDM_SETBKCOLOR, 0, load_config()->menubar_bgcolor);
+            SendMessage(hWnd, HDM_SETTEXTCOLOR, 0, load_config()->menubar_textcolor);
         }
         else if (name == L"msctls_statusbar32")
         {
