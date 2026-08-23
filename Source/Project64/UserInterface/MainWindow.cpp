@@ -144,7 +144,7 @@ bool CMainGui::RegisterWinClass(void)
     wcl.hInstance = GetModuleHandle(nullptr);
 
     wcl.lpfnWndProc = (WNDPROC)RenderWndProc;
-    wcl.hbrBackground = (HBRUSH)GetStockObject(LTGRAY_BRUSH);
+    wcl.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wcl.lpszMenuName = nullptr;
     wcl.lpszClassName = L"LunaProject64Render";
     if (RegisterClass(&wcl) == 0) return false;
