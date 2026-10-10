@@ -11194,7 +11194,7 @@ void CX86RecompilerOps::SW_Const(uint32_t Value, uint32_t VAddr)
             m_RegWorkingSet.BeforeCallDirect();
             if (g_System->bFixedAudio())
             {
-                X86BreakPoint(__FILE__, __LINE__);
+                // X86BreakPoint(__FILE__, __LINE__);
                 MoveConstToX86reg((uint32_t)g_Audio, x86_ECX);
                 Call_Direct(AddressOf(&CAudio::LenChanged), "LenChanged");
             }
