@@ -2,6 +2,7 @@
 #include "N64SYstem.h"
 #include <Project64-core/3rdParty/zip.h>
 #include <Project64-core/InputDelayer.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/Recompiler/RecompilerCodeLog.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/N64System/Mips/Mempak.h>
@@ -28,6 +29,24 @@
 #endif
 
 #pragma warning(disable : 4355) // Disable 'this' : used in base member initializer list
+
+// Identifies a savestate file's current contents well enough to tell whether
+// an in-memory copy of it is still the same state.
+static bool StateFileStamp(const std::string & File, uint64_t & WriteTime, uint64_t & FileSize)
+{
+#ifdef _WIN32
+    WIN32_FILE_ATTRIBUTE_DATA Data;
+    if (!GetFileAttributesExA(File.c_str(), GetFileExInfoStandard, &Data))
+    {
+        return false;
+    }
+    WriteTime = ((uint64_t)Data.ftLastWriteTime.dwHighDateTime << 32) | Data.ftLastWriteTime.dwLowDateTime;
+    FileSize = ((uint64_t)Data.nFileSizeHigh << 32) | Data.nFileSizeLow;
+    return true;
+#else
+    return false;
+#endif
+}
 
 CN64System::CN64System(CPlugins * Plugins, uint32_t randomizer_seed, bool SavesReadOnly, bool SyncSystem) :
     CSystemEvents(this, Plugins),
@@ -820,6 +839,7 @@ void CN64System::Pause()
     }
     m_hPauseEvent.IsTriggered(SyncEvent::INFINITE_TIMEOUT);
     m_hPauseEvent.Reset();
+    CFramePacing::Paused();
     g_Settings->SaveBool(GameRunning_CPU_Paused, (uint32_t)false);
     if (pause_type == PauseType_FromMenu)
     {
@@ -882,7 +902,7 @@ void CN64System::ApplyGSButton(void)
     }
 }
 
-void CN64System::Reset(bool bInitReg, bool ClearMenory)
+void CN64System::Reset(bool bInitReg, bool ClearMenory, bool KeepRecompiledCode)
 {
     WriteTrace(TraceN64System, TraceDebug, "Start (bInitReg: %s, ClearMenory: %s)", bInitReg ? "true" : "false", ClearMenory ? "true" : "false");
     g_Settings->SaveBool(GameRunning_InReset, true);
@@ -923,7 +943,14 @@ void CN64System::Reset(bool bInitReg, bool ClearMenory)
 
     if (m_Recomp)
     {
-        m_Recomp->Reset();
+        if (KeepRecompiledCode)
+        {
+            m_Recomp->ResetLookupTables();
+        }
+        else
+        {
+            m_Recomp->Reset();
+        }
     }
     /*if (m_Plugins && g_Settings->LoadBool(GameRunning_CPU_Running))
     {
@@ -932,7 +959,7 @@ void CN64System::Reset(bool bInitReg, bool ClearMenory)
     }*/
     if (m_SyncCPU && m_SyncCPU->m_MMU_VM.Rdram() != nullptr)
     {
-        m_SyncCPU->Reset(bInitReg, ClearMenory);
+        m_SyncCPU->Reset(bInitReg, ClearMenory, KeepRecompiledCode);
     }
     g_Settings->SaveBool(GameRunning_InReset, true);
     g_SummerCart->Reset();
@@ -1791,6 +1818,7 @@ void CN64System::DumpSyncErrors(CN64System * SecondCPU)
 bool CN64System::SaveState()
 {
     WriteTrace(TraceN64System, TraceDebug, "Start");
+    CFrameCost Cost(FrameCost_State);
 
     HighResTimeStamp Start = m_Limiter.Now();
 
@@ -2074,6 +2102,7 @@ bool CN64System::SaveState()
 bool CN64System::LoadState()
 {
     WriteTrace(TraceN64System, TraceDebug, "Start");
+    CFrameCost Cost(FrameCost_State);
 
     stdstr InstantFileName = g_Settings->LoadStringVal(GameRunning_InstantSaveFile);
     if (!InstantFileName.empty())
@@ -2121,6 +2150,32 @@ bool CN64System::LoadState()
         }
     }
 
+    // A state that has already been read or written this session loads
+    // straight from memory. The first load of a slot from disk goes through
+    // the same in-memory path and leaves the state cached for the next one.
+    if (m_SaverThread && g_Settings->LoadDword(Setting_AutoZipInstantSave))
+    {
+        state = FindCachedState(ZipFileName);
+        if (!state && ZipFileName.Exists())
+        {
+            state = MemoryState::Load(ZipFileName, SaveID_0, SaveID_2);
+            if (state && StateMatchesRom(*state))
+            {
+                CacheState(ZipFileName, state);
+            }
+            else
+            {
+                // Leave anything unusual, including a header mismatch the
+                // user should be asked about, to the regular loader
+                state = nullptr;
+            }
+        }
+        if (state && LoadState(ZipFileName, state))
+        {
+            return true;
+        }
+    }
+
     if (g_Settings->LoadDword(Setting_AutoZipInstantSave))
     {
         FileName = ZipFileName;
@@ -2161,6 +2216,7 @@ bool CN64System::LoadState()
 
 bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
 {
+    CFrameCost Cost(FrameCost_State);
     HighResTimeStamp Start = m_Limiter.Now();
 
     uint32_t SaveRDRAMSize, NextVITimer = 0, old_status, old_width, old_dacrate;
@@ -2170,7 +2226,9 @@ bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
     old_dacrate = m_Reg.AI_DACRATE_REG;
 
     {
-        Reset(false, true);
+        // Compiled code survives the load and is revalidated block by block,
+        // unless the RDRAM layout itself changes.
+        Reset(false, true, state->RdramSize == g_Settings->LoadDword(Game_RDRamSize));
 
         SaveRDRAMSize = state->RdramSize;
         m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
@@ -2292,6 +2350,7 @@ bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
 bool CN64System::LoadState(const char * FileName)
 {
     WriteTrace(TraceN64System, TraceDebug, "(%s): Start", FileName);
+    CFrameCost Cost(FrameCost_State);
 
     HighResTimeStamp Start = m_Limiter.Now();
 
@@ -2360,7 +2419,7 @@ bool CN64System::LoadState(const char * FileName)
                         return false;
                     }
                 }
-                Reset(false, true);
+                Reset(false, true, SaveRDRAMSize == g_Settings->LoadDword(Game_RDRamSize));
 
                 m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
                 m_MMU_VM.UnProtectMemory(0xA4000000, 0xA4001FFC);
@@ -2455,7 +2514,7 @@ bool CN64System::LoadState(const char * FileName)
                 return false;
             }
         }
-        Reset(false, true);
+        Reset(false, true, SaveRDRAMSize == g_Settings->LoadDword(Game_RDRamSize));
         m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
         m_MMU_VM.UnProtectMemory(0xA4000000, 0xA4001FFC);
         g_Settings->SaveDword(Game_RDRamSize, SaveRDRAMSize);
@@ -2650,6 +2709,7 @@ void CN64System::RunRSP()
                 }
             }
 
+            bool RspCost = CFramePacing::Enter(FrameCost_Rsp);
             __except_try()
             {
                 WriteTrace(TraceRSP, TraceDebug, "Do cycles - starting");
@@ -2661,6 +2721,7 @@ void CN64System::RunRSP()
                 WriteTrace(TraceRSP, TraceError, "Exception generated");
                 g_Notify->FatalError("CN64System::RunRSP()\nUnknown memory action\n\nEmulation stopping");
             }
+            if (RspCost) { CFramePacing::Leave(); }
 
             if (Task == 1 && bDelayDP() && ((m_Reg.m_GfxIntrReg & MI_INTR_DP) != 0))
             {
@@ -2710,6 +2771,7 @@ void CN64System::ResumeRSP()
     g_Reg->SP_SEMAPHORE_REG = 0;
     if (prevValue && *g_Plugins->RSP()->m_RspYieldedOnSemaphore)
     {
+        bool RspCost = CFramePacing::Enter(FrameCost_Rsp);
         __except_try()
         {
             WriteTrace(TraceRSP, TraceDebug, "Resume cycles - starting");
@@ -2721,6 +2783,7 @@ void CN64System::ResumeRSP()
             WriteTrace(TraceRSP, TraceError, "Exception generated");
             g_Notify->FatalError("CN64System::RunRSP()\nUnknown memory action\n\nEmulation stopping");
         }
+        if (RspCost) { CFramePacing::Leave(); }
     }
 }
 
@@ -2752,6 +2815,7 @@ void CN64System::RefreshScreen()
 
     if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateScreen); }
 
+    bool GfxCost = CFramePacing::Enter(FrameCost_Gfx);
     __except_try()
     {
         WriteTrace(TraceGFXPlugin, TraceDebug, "UpdateScreen starting");
@@ -2766,24 +2830,43 @@ void CN64System::RefreshScreen()
     {
         WriteTrace(TraceGFXPlugin, TraceError, "Exception caught");
     }
+    if (GfxCost) { CFramePacing::Leave(); }
     g_MMU->UpdateFieldSerration((m_Reg.VI_STATUS_REG & 0x40) != 0);
 
     if ((bBasicMode() || bLimitFPS()) && (!bSyncToAudio() || !FullSpeed()))
     {
         if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_Idel); }
-        uint32_t FrameRate;
-        if (m_Limiter.Timer_Process(&FrameRate) && bDisplayFrameRate())
+        uint32_t FrameRate = 0, FrameRateFraction = 0;
+        bool WaitCost = CFramePacing::Enter(FrameCost_Wait);
+        bool FrameRateReady = m_Limiter.Timer_Process(&FrameRate, &FrameRateFraction);
+        if (WaitCost) { CFramePacing::Leave(); }
+        if (this == g_BaseSystem)
         {
-            m_FPS.DisplayViCounter(FrameRate, 0);
+            const CSpeedLimiter::WaitInfo & Wait = m_Limiter.LastWait();
+            CFramePacing::RecordLimiter(Wait.Requested, Wait.Actual, Wait.Late, Wait.Reanchored);
+        }
+        if (FrameRateReady && bDisplayFrameRate())
+        {
+            m_FPS.DisplayViCounter(FrameRate, FrameRateFraction);
             m_bCleanFrameBox = true;
         }
         if (bShowCPUPer()) { m_CPU_Usage.StopTimer(); }
     }
-    else if (bDisplayFrameRate())
+    else
     {
-        if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateFPS); }
-        m_FPS.UpdateViCounter();
-        m_bCleanFrameBox = true;
+        // Nothing is pacing these frames, so when the limiter comes back it
+        // should start a fresh schedule rather than see itself as behind.
+        m_Limiter.Reset();
+        if (bDisplayFrameRate())
+        {
+            if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateFPS); }
+            m_FPS.UpdateViCounter();
+            m_bCleanFrameBox = true;
+        }
+    }
+    if (this == g_BaseSystem)
+    {
+        CFramePacing::FrameEnd(m_Limiter.GetSpeed());
     }
 
     if (m_bCleanFrameBox && !bDisplayFrameRate())
@@ -2832,6 +2915,11 @@ void CN64System::TLB_Changed()
 
 void CN64System::StateSaverThread()
 {
+#ifdef _WIN32
+    // Compressing a savestate is background work; keep it out of the way of
+    // the emulation and graphics threads.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#endif
     std::unique_lock<std::mutex> lck(m_StatesMutex);
     while (true)
     {
@@ -2851,6 +2939,9 @@ void CN64System::StateSaverThread()
 
         lck.unlock();
         StateInfo.State->store(SaveFile, StateInfo.ExtraInfo);
+        std::string ZipFile = (const std::string &)SaveFile + ".zip";
+        uint64_t WriteTime = 0, FileSize = 0;
+        bool Stamped = StateFileStamp(ZipFile, WriteTime, FileSize);
         lck.lock();
 
         auto it = m_States.find(SaveFile);
@@ -2858,9 +2949,87 @@ void CN64System::StateSaverThread()
         {
             if (it->second.State == StateInfo.State)
             {
+                // Keep the state for reloads now that it matches the file
+                if (Stamped)
+                {
+                    CacheStateLocked(ZipFile, StateInfo.State, WriteTime, FileSize);
+                }
                 m_States.erase(SaveFile);
                 m_ThrollingCV.notify_one();
             }
         }
     }
+}
+
+std::shared_ptr<MemoryState> CN64System::FindCachedState(const std::string & ZipFile)
+{
+    CachedState Entry;
+    {
+        std::lock_guard<std::mutex> lck(m_StatesMutex);
+        auto it = m_StateCache.find(ZipFile);
+        if (it == m_StateCache.end())
+        {
+            return nullptr;
+        }
+        it->second.LastUsed = ++m_StateCacheClock;
+        Entry = it->second;
+    }
+
+    uint64_t WriteTime = 0, FileSize = 0;
+    if (StateFileStamp(ZipFile, WriteTime, FileSize) && WriteTime == Entry.WriteTime && FileSize == Entry.FileSize)
+    {
+        return Entry.State;
+    }
+
+    // The file was replaced or removed behind our back; the copy is stale
+    std::lock_guard<std::mutex> lck(m_StatesMutex);
+    auto it = m_StateCache.find(ZipFile);
+    if (it != m_StateCache.end() && it->second.State == Entry.State)
+    {
+        m_StateCache.erase(it);
+    }
+    return nullptr;
+}
+
+void CN64System::CacheState(const std::string & ZipFile, const std::shared_ptr<MemoryState> & State)
+{
+    uint64_t WriteTime = 0, FileSize = 0;
+    if (!StateFileStamp(ZipFile, WriteTime, FileSize))
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lck(m_StatesMutex);
+    CacheStateLocked(ZipFile, State, WriteTime, FileSize);
+}
+
+void CN64System::CacheStateLocked(const std::string & ZipFile, const std::shared_ptr<MemoryState> & State, uint64_t WriteTime, uint64_t FileSize)
+{
+    CachedState & Entry = m_StateCache[ZipFile];
+    Entry.State = State;
+    Entry.WriteTime = WriteTime;
+    Entry.FileSize = FileSize;
+    Entry.LastUsed = ++m_StateCacheClock;
+
+    while (m_StateCache.size() > MaxCachedStates)
+    {
+        auto Oldest = m_StateCache.begin();
+        for (auto it = m_StateCache.begin(); it != m_StateCache.end(); it++)
+        {
+            if (it->second.LastUsed < Oldest->second.LastUsed)
+            {
+                Oldest = it;
+            }
+        }
+        m_StateCache.erase(Oldest);
+    }
+}
+
+bool CN64System::StateMatchesRom(const MemoryState & State) const
+{
+    if (g_Settings->LoadBool(Setting_EnableDisk) && g_Disk)
+    {
+        return memcmp(State.RomData, &g_Rom->GetRomAddress()[0x10], 0x20) == 0 &&
+            memcmp(&State.RomData[0x20], g_Disk->GetDiskAddressID(), 0x20) == 0;
+    }
+    return memcmp(State.RomData, g_Rom->GetRomAddress(), 0x40) == 0;
 }

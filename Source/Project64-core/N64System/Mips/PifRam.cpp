@@ -3,6 +3,7 @@
 
 #include <Project64-core/InputDelayer.h>
 #include <Project64-core/N64System/Mips/PifRam.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/Plugins/ControllerPlugin.h>
 #include <Project64-core/N64System/Mips/Register.h>
@@ -86,6 +87,7 @@ void CPifRam::n64_cic_nus_6105(char challenge[], char respone[], int32_t length)
 
 void CPifRam::PifRamRead()
 {
+    CFrameCost Cost(FrameCost_Pif);
     if (m_PifRam[0x3F] == 0x2)
     {
         return;
@@ -149,6 +151,7 @@ void CPifRam::PifRamRead()
 
 void CPifRam::PifRamWrite()
 {
+    CFrameCost Cost(FrameCost_Pif);
     CONTROL * Controllers = g_Plugins->Control()->PluginControllers();
     int32_t Channel = 0, CurPos;
 

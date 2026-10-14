@@ -37,6 +37,8 @@ public:
     inline static CPU_TYPE CpuType(void) { return m_CpuType; }
     inline static uint32_t OverClockModifier(void) { return m_OverClockModifier; }
     inline static DISK_SEEK_TYPE DiskSeekTimingType(void) { return m_DiskSeekTimingType; };
+    inline static bool bUnalignedDMA(void) { return m_bUnalignedDMA; }
+    inline static bool bAllowROMWrites(void) { return m_bAllowROMWrites; }
 
 	void RefreshSyncToAudio(void);
     static void SetOverClockModifier(bool EnhancmentOverClock, uint32_t EnhancmentOverClockModifier);
@@ -75,6 +77,8 @@ private:
     static CPU_TYPE m_CpuType;
     static uint32_t m_OverClockModifier;
     static DISK_SEEK_TYPE m_DiskSeekTimingType;
+    static bool m_bUnalignedDMA;
+    static bool m_bAllowROMWrites;
     static bool m_EnhancmentOverClock;
     static uint32_t m_EnhancmentOverClockModifier;
 };

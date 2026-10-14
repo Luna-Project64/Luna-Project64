@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include <Common/SipHash.h>
 #include <Project64-core/N64System/Recompiler/Recompiler.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/N64System/Recompiler/RecompilerCodeLog.h>
 #include <Project64-core/N64System/N64System.h>
@@ -747,6 +748,19 @@ void CRecompiler::Reset()
     WriteTrace(TraceRecompiler, TraceDebug, "Done");
 }
 
+// Forget where compiled code lives but keep the code. Every block then goes
+// back through CompileCode the next time it runs, which hashes the block's
+// MIPS code and reuses the translation only if it is unchanged. Used when a
+// savestate replaces RDRAM: recompiling a whole game's working set after each
+// load costs tens of milliseconds right on the first frames of gameplay.
+void CRecompiler::ResetLookupTables()
+{
+    WriteTrace(TraceRecompiler, TraceDebug, "Start");
+    CFunctionMap::Reset(true);
+    ResetMemoryStackPos();
+    WriteTrace(TraceRecompiler, TraceDebug, "Done");
+}
+
 void CRecompiler::ResetRecompCode(bool bAllocate)
 {
     WriteTrace(TraceRecompiler, TraceDebug, "Start");
@@ -939,6 +953,7 @@ void CRecompiler::RecompilerMain_ChangeMemory()
 
 CCompiledFunc * CRecompiler::CompileCode()
 {
+    CFrameCost Cost(FrameCost_Compile);
     WriteTrace(TraceRecompiler, TraceDebug, "Start (PC: %X)", PROGRAM_COUNTER);
 
     uint32_t pAddr = 0;
