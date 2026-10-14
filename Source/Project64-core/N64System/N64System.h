@@ -134,6 +134,7 @@ private:
     void TLB_Changed();
 
     void StateSaverThread();
+    static void CALL NtscFrameRateChanged(CN64System * _this);
 
     // Savestates already read or written this session, kept in memory so a
     // reload skips the disk and the decompression.

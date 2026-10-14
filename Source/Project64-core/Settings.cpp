@@ -184,6 +184,7 @@ void CSettings::AddHowToHandleSetting(const char* BaseDirectory)
     AddHandler(Setting_DiskSaveType, new CSettingTypeApplication("Settings", "Disk Save Type", (uint32_t)1));
     AddHandler(Setting_HighPerformanceScheduling, new CSettingTypeApplication("Settings", "High Performance Scheduling", true));
     AddHandler(Setting_FramePacingLog, new CSettingTypeApplication("Settings", "Frame Pacing Log", true));
+    AddHandler(Setting_NtscFrameRate, new CSettingTypeApplication("Settings", "NTSC Frame Rate", false));
 
 	AddHandler(Default_RDRamSize, new CSettingTypeApplication("Defaults", "RDRAM Size", 0x800000u));
 	AddHandler(Default_UseHleGfx, new CSettingTypeApplication("Defaults", "HLE GFX Default", true));

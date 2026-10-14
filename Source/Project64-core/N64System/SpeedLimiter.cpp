@@ -74,9 +74,11 @@ static const int64_t InitialSpinMarginUs = 2000;
 CSpeedLimiter::CSpeedLimiter() :
     m_Speed(m_DefaultSpeed),
     m_ReanchorPending(true),
+    m_NtscRate(false),
     m_BaseSpeed(m_DefaultSpeed),
     m_Frequency(1),
     m_ActiveSpeed(m_DefaultSpeed),
+    m_ActiveNtsc(false),
     m_Anchor(0),
     m_FramesSinceAnchor(0),
     m_FpsWindowStart(0),
@@ -227,9 +229,11 @@ bool CSpeedLimiter::Timer_Process(uint32_t * FrameRate, uint32_t * FrameRateFrac
     // Start a fresh schedule on this frame without waiting: after a reset, a
     // savestate load or a speed change, sleeping a whole period on top of the
     // work this frame has already done would show up as a long frame.
-    if (m_ReanchorPending.exchange(false) || Speed != m_ActiveSpeed || m_Anchor == 0)
+    bool Ntsc = m_NtscRate && m_BaseSpeed == m_DefaultSpeed;
+    if (m_ReanchorPending.exchange(false) || Speed != m_ActiveSpeed || Ntsc != m_ActiveNtsc || m_Anchor == 0)
     {
         m_ActiveSpeed = Speed;
+        m_ActiveNtsc = Ntsc;
         Anchor(Now);
         return CountFrame(Now, FrameRate, FrameRateFraction);
     }
@@ -237,9 +241,11 @@ bool CSpeedLimiter::Timer_Process(uint32_t * FrameRate, uint32_t * FrameRateFrac
     // Deadlines are an exact fraction of a second from the anchor, so the
     // schedule never drifts and an oversleep on one frame is paid back by a
     // shorter wait on the next.
+    // At the NTSC rate every period is stretched by 1001/1000.
     m_FramesSinceAnchor += 1;
-    int64_t Period = m_Frequency / Speed;
-    int64_t Deadline = m_Anchor + (int64_t)(m_FramesSinceAnchor * (uint64_t)m_Frequency / Speed);
+    uint64_t Numerator = Ntsc ? 1001 : 1000;
+    int64_t Period = (int64_t)((uint64_t)m_Frequency * Numerator / ((uint64_t)Speed * 1000));
+    int64_t Deadline = m_Anchor + (int64_t)(m_FramesSinceAnchor * (uint64_t)m_Frequency * Numerator / ((uint64_t)Speed * 1000));
     if (Now < Deadline)
     {
         WaitUntil(Deadline);
@@ -306,6 +312,11 @@ void CSpeedLimiter::SetSpeed(int Speed)
     m_Speed = Speed;
     SpeedChanged(Speed);
     FixSpeedRatio();
+}
+
+void CSpeedLimiter::SetNtscRate(bool Ntsc)
+{
+    m_NtscRate = Ntsc;
 }
 
 int CSpeedLimiter::GetSpeed(void) const
