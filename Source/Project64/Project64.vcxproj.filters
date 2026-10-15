@@ -288,6 +288,9 @@
     <ClCompile Include="UserInterface\SaveStateManagerUI.cpp">
       <Filter>Source Files\User Interface Source</Filter>
     </ClCompile>
+    <ClCompile Include="UserInterface\StarTimesUI.cpp">
+      <Filter>Source Files\User Interface Source</Filter>
+    </ClCompile>
     <ClCompile Include="ProfileManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

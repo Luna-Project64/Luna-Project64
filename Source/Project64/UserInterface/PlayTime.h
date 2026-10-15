@@ -23,6 +23,23 @@ public:
     };
     typedef std::map<std::string, GameStats> GameStatsMap;
 
+    // SM64 hacks only: time spent per star (the act selected on the star select
+    // screen, including practice and savestate loads) and how often it was grabbed
+    enum
+    {
+        StarAnyAct = 7, // Time in a course without a star select (castle, bowser, secret courses)
+    };
+    struct StarStats
+    {
+        uint32_t Seconds;
+        uint32_t Grabs;
+        uint32_t FirstGrabAfter; // Seconds spent on the star before the first grab, valid if Grabs > 0
+    };
+    typedef std::map<int, StarStats> StarStatsMap; // Key: Course * 8 + Star (0 based) or StarAnyAct
+    static int StarKey(int Course, int Star) { return Course * 8 + Star; }
+
+    StarStatsMap GetStarStats(const std::string & Key);
+
     static CPlayTime & Get(void);
 
     void Start(void);
@@ -51,10 +68,12 @@ private:
     void BeginSession(void);
     void EndSession(void);
     void Flush(void);
-    std::string IniFileName(void);
+    void TrackStars(uint32_t Seconds);
+    std::string IniFileName(const char * FileName);
 
     CriticalSection m_CS;
     GameStatsMap m_Stats;
+    std::map<std::string, StarStatsMap> m_StarStats;
     HANDLE m_Thread;
     HANDLE m_StopEvent;
 
