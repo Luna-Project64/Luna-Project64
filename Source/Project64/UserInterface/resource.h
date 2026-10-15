@@ -1002,14 +1002,25 @@
 #define ID_SDCARD_CREATE_DIRECTORY      40167
 #define ID_SDCARD_BACK                  40168
 #define ID_SDCARD_DELETE                40169
+#define IDD_Play_Stats                  230
+#define IDD_Save_States                 231
+#define IDC_STATS_SUMMARY               1766
+#define IDC_STATS_LIST                  1767
+#define IDC_SS_LIST                     1768
+#define IDC_SS_PREVIEW                  1769
+#define IDC_SS_NO_PREVIEW               1770
+#define IDC_SS_LABEL                    1771
+#define IDC_SS_SET_LABEL                1772
+#define IDC_SS_LOAD                     1773
+#define IDC_SS_SAVE                     1774
 
 // Next default values for new objects
-// 
+//
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        230
+#define _APS_NEXT_RESOURCE_VALUE        232
 #define _APS_NEXT_COMMAND_VALUE         40170
-#define _APS_NEXT_CONTROL_VALUE         1766
+#define _APS_NEXT_CONTROL_VALUE         1775
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif
