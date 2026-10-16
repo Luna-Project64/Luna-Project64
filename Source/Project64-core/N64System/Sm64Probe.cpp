@@ -13,6 +13,7 @@ static const uint32_t SM64_SaveFileSize = 0x38;
 static const uint32_t SM64_SaveFileFlags = 0x08;          // u32, castle stars in bits 24..30
 static const uint32_t SM64_SaveFileCourseStars = 0x0C;    // u8[25], bit 7 is the cannon
 static const uint32_t SM64_sSegmentTable = 0x0033B400;    // u32[32], physical addresses
+static const uint32_t SM64_MarioNumStars = 0x0033B21A;    // s16, gMarioStates[0].numStars
 static const uint32_t SM64_CourseNameTable = 0x00010F68;  // in segment 2, 25 pointers (courses 1..25)
 static const uint32_t SM64_ActNameTable = 0x0001192C;     // in segment 2, 15 * 6 pointers
 
@@ -25,6 +26,7 @@ uint8_t CSm64Probe::m_Stars[CSm64Probe::CourseCount];
 uint32_t CSm64Probe::m_ViCount = 0;
 CSm64Probe::Snapshot CSm64Probe::m_Snapshot = { false, 0, 0, 0 };
 std::vector<CSm64Probe::StarGrab> CSm64Probe::m_Grabs;
+int CSm64Probe::m_CannonStars = -1;
 bool CSm64Probe::m_HaveNames = false;
 CSm64Probe::Names CSm64Probe::m_Names;
 
@@ -219,6 +221,26 @@ void CSm64Probe::RomOpened(const uint8_t * Rom, uint32_t RomSize)
     m_Snapshot.Valid = false;
     m_Grabs.clear();
     m_HaveNames = false;
+    m_CannonStars = -1;
+}
+
+int CSm64Probe::CountStars(const uint8_t (&Stars)[CourseCount], uint8_t CourseMask)
+{
+    // Stars[0] holds the castle stars, Stars[1..] the raw course bytes
+    int Count = 0;
+    for (int Bit = 0; Bit < 7; Bit++) { Count += (Stars[0] >> Bit) & 1; }
+    for (int Course = 1; Course < CourseCount; Course++)
+    {
+        uint8_t Bits = Stars[Course] & CourseMask;
+        for (int Bit = 0; Bit < 8; Bit++) { Count += (Bits >> Bit) & 1; }
+    }
+    return Count;
+}
+
+int CSm64Probe::GetCannonStars(void)
+{
+    CGuard Guard(m_CS);
+    return m_CannonStars;
 }
 
 void CSm64Probe::StateLoading(void)
@@ -239,7 +261,8 @@ bool CSm64Probe::ReadStars(const uint8_t * Rdram, int16_t SaveFile, uint8_t (&St
     Stars[0] = (uint8_t)((ReadU32(Rdram, File + SM64_SaveFileFlags) >> 24) & 0x7F);
     for (int Course = 1; Course < CourseCount; Course++)
     {
-        Stars[Course] = ReadU8(Rdram, File + SM64_SaveFileCourseStars + (Course - 1)) & 0x7F;
+        // Raw byte: bit 7 is the cannon, or an 8th star in some hacks
+        Stars[Course] = ReadU8(Rdram, File + SM64_SaveFileCourseStars + (Course - 1));
     }
     return true;
 }
@@ -267,11 +290,28 @@ void CSm64Probe::OnViRefresh(const uint8_t * Rdram, uint32_t RdramSize)
     Names NewNames;
     bool GotNames = !m_HaveNames && ReadNames(Rdram, RdramSize, NewNames);
 
+    // Some hacks count the cannon bit as an 8th star per course. The game's own
+    // total (Mario's star counter) tells which counting the hack uses.
+    int CannonStars = -1;
+    if (HaveStars)
+    {
+        int GameCount = ReadS16(Rdram, SM64_MarioNumStars);
+        int SevenBits = CountStars(Stars, 0x7F), EightBits = CountStars(Stars, 0xFF);
+        if (SevenBits != EightBits && GameCount > 0)
+        {
+            CannonStars = GameCount == EightBits ? 1 : (GameCount == SevenBits ? 0 : -1);
+        }
+    }
+
     CGuard Guard(m_CS);
     if (GotNames)
     {
         m_Names = NewNames;
         m_HaveNames = true;
+    }
+    if (CannonStars >= 0)
+    {
+        m_CannonStars = CannonStars;
     }
     m_Snapshot.Valid = Valid;
     m_Snapshot.Course = Course;

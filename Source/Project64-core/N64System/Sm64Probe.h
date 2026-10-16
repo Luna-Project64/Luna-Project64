@@ -52,6 +52,11 @@ public:
     static std::vector<StarGrab> TakeStarGrabs(void);
     static bool GetNames(Names & Out);
 
+    // 1 if this hack counts each course's cannon bit as a star, 0 if not, -1 not known yet
+    static int GetCannonStars(void);
+    // Stars in a save: Stars[0] = castle star bits, Stars[1..25] = course bytes
+    static int CountStars(const uint8_t (&Stars)[CourseCount], uint8_t CourseMask);
+
     // Exposed for tests: decode SM64 text at Addr in RDRAM
     static std::string DecodeText(const uint8_t * Rdram, uint32_t RdramSize, uint32_t Addr);
 
@@ -64,6 +69,7 @@ private:
     static bool ReadStars(const uint8_t * Rdram, int16_t SaveFile, uint8_t (&Stars)[CourseCount]);
     static bool ReadNames(const uint8_t * Rdram, uint32_t RdramSize, Names & Out);
 
+    static int m_CannonStars;
     static bool m_HaveNames;
     static Names m_Names;
 

@@ -116,6 +116,8 @@ void CPlayTime::Start(void)
             Stats.LongestSession = IniGetUInt(Ini, Section, "Longest Session");
             Stats.FirstPlayed = IniGetUInt(Ini, Section, "First Played");
             Stats.LastPlayed = IniGetUInt(Ini, Section, "Last Played");
+            std::string CannonStars = Ini.GetString(Section, "Cannon Stars", "");
+            Stats.CannonStars = CannonStars.empty() ? -1 : atoi(CannonStars.c_str());
         }
     }
 
@@ -224,6 +226,13 @@ void CPlayTime::TrackStars(uint32_t Seconds)
     {
         SaveStarNames(Names);
         m_SessionNamesSaved = true;
+    }
+    int CannonStars = CSm64Probe::GetCannonStars();
+    GameStatsMap::iterator Game = m_Stats.find(m_SessionKey);
+    if (CannonStars >= 0 && Game != m_Stats.end())
+    {
+        // Remembered so the ROM browser counts this hack's saves the way the game does
+        Game->second.CannonStars = CannonStars;
     }
     StarStatsMap & Stars = m_StarStats[m_SessionKey];
 
@@ -353,7 +362,7 @@ void CPlayTime::ThreadProc(void)
         GameStatsMap::iterator itr = m_Stats.find(m_SessionKey);
         if (itr == m_Stats.end())
         {
-            GameStats NewStats = { "", 0, 0, 0, TimeNow, TimeNow };
+            GameStats NewStats = { "", 0, 0, 0, TimeNow, TimeNow, -1 };
             itr = m_Stats.insert(GameStatsMap::value_type(m_SessionKey, NewStats)).first;
         }
 
@@ -472,5 +481,9 @@ void CPlayTime::Flush(void)
     Ini.SaveString(Section, "Longest Session", stdstr_f("%u", Stats.LongestSession).c_str());
     Ini.SaveString(Section, "First Played", stdstr_f("%u", Stats.FirstPlayed).c_str());
     Ini.SaveString(Section, "Last Played", stdstr_f("%u", Stats.LastPlayed).c_str());
+    if (Stats.CannonStars >= 0)
+    {
+        Ini.SaveString(Section, "Cannon Stars", stdstr_f("%d", Stats.CannonStars).c_str());
+    }
     Ini.FlushChanges();
 }

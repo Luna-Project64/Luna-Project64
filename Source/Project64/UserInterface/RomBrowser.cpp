@@ -405,7 +405,7 @@ void CRomBrowser::RomListLoaded(void)
     RomList_SortList();
 }
 
-static int CountSm64Stars(const uint8_t * Eeprom, size_t Size)
+static int CountSm64Stars(const uint8_t * Eeprom, size_t Size, bool CannonStars)
 {
     // SM64 save layout: 4 files, each stored twice as 0x38 byte blocks ending in a
     // "DA" signature and a 16 bit sum of the preceding bytes
@@ -434,18 +434,55 @@ static int CountSm64Stars(const uint8_t * Eeprom, size_t Size)
             for (int Bit = 0; Bit < 7; Bit++) { Stars += (CastleStars >> Bit) & 1; }
             for (size_t Course = 0; Course < 25; Course++)
             {
-                uint8_t CourseStars = Block[0x0C + Course] & 0x7F; // bit 7 is the cannon
-                for (int Bit = 0; Bit < 7; Bit++) { Stars += (CourseStars >> Bit) & 1; }
+                // Bit 7 is the cannon, unless the hack turned it into an 8th star
+                uint8_t CourseStars = Block[0x0C + Course] & (CannonStars ? 0xFF : 0x7F);
+                for (int Bit = 0; Bit < 8; Bit++) { Stars += (CourseStars >> Bit) & 1; }
             }
-            // Every bit set (182) is the well known corrupted EEPROM, not real progress
-            if (Stars < 26 * 7)
-            {
-                Best = Stars > Best ? Stars : Best;
-            }
+            Best = Stars > Best ? Stars : Best;
             break; // main copy is valid, the backup holds the same data
         }
     }
     return Best;
+}
+
+static int RomCannonStars(const char * RomFile)
+{
+    // The common "8 stars per course" patch changes save_file_get_course_star_count's
+    // loop from 7 to 8 bits (slti at, t3, 7 at ROM 0x34FDC in the US engine)
+    HANDLE hFile = CreateFileA(RomFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return -1;
+    }
+    uint8_t Header[4], Code[4];
+    DWORD Read = 0;
+    bool Ok = ReadFile(hFile, Header, sizeof(Header), &Read, nullptr) && Read == sizeof(Header) &&
+        SetFilePointer(hFile, 0x34FDC, nullptr, FILE_BEGIN) == 0x34FDC &&
+        ReadFile(hFile, Code, sizeof(Code), &Read, nullptr) && Read == sizeof(Code);
+    CloseHandle(hFile);
+    if (!Ok)
+    {
+        return -1;
+    }
+
+    uint32_t Word;
+    if (Header[0] == 0x80 && Header[1] == 0x37) // .z64, big endian
+    {
+        Word = (Code[0] << 24) | (Code[1] << 16) | (Code[2] << 8) | Code[3];
+    }
+    else if (Header[0] == 0x37 && Header[1] == 0x80) // .v64, byte swapped
+    {
+        Word = (Code[1] << 24) | (Code[0] << 16) | (Code[3] << 8) | Code[2];
+    }
+    else if (Header[0] == 0x40 && Header[1] == 0x12) // .n64, little endian
+    {
+        Word = (Code[3] << 24) | (Code[2] << 16) | (Code[1] << 8) | Code[0];
+    }
+    else
+    {
+        return -1; // zipped or not a ROM we can peek into
+    }
+    return Word == 0x29610008 ? 1 : (Word == 0x29610007 ? 0 : -1);
 }
 
 int CRomBrowser::StarsCollected(const ROM_INFO * pRomInfo)
@@ -491,7 +528,16 @@ int CRomBrowser::StarsCollected(const ROM_INFO * pRomInfo)
         DWORD Read = 0;
         if (ReadFile(hFile, Eeprom, sizeof(Eeprom), &Read, nullptr))
         {
-            Stars = CountSm64Stars(Eeprom, Read);
+            // Some hacks count each course's cannon bit as an 8th star. Check the ROM's star
+            // counting code first, else use what was learned while the hack ran (see CSm64Probe)
+            int CannonStars = RomCannonStars(pRomInfo->szFullFileName);
+            if (CannonStars < 0)
+            {
+                CPlayTime::GameStats Stats = { "", 0, 0, 0, 0, 0, -1 };
+                CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country), Stats);
+                CannonStars = Stats.CannonStars;
+            }
+            Stars = CountSm64Stars(Eeprom, Read, CannonStars == 1);
         }
         CloseHandle(hFile);
     }

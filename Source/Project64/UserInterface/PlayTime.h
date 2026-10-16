@@ -22,6 +22,7 @@ public:
         uint32_t LongestSession;
         uint32_t FirstPlayed;
         uint32_t LastPlayed;
+        int CannonStars; // SM64 hacks: 1 = cannon bits are stars, 0 = they aren't, -1 = unknown
     };
     typedef std::map<std::string, GameStats> GameStatsMap;
 
