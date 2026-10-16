@@ -45,6 +45,12 @@ private:
 
     static int CALLBACK CompareItems(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
+    std::wstring DisplayCourse(int Course);
+    std::wstring DisplayStar(int Key);
+
+    bool m_HaveNames;
+    CSm64Probe::Names m_Names;
+
     std::string m_GameKey;
     std::string m_GameName;
     std::vector<Row> m_Rows;

@@ -12,6 +12,9 @@ static const uint32_t SM64_gSaveBuffer = 0x00207700;      // struct SaveFile fil
 static const uint32_t SM64_SaveFileSize = 0x38;
 static const uint32_t SM64_SaveFileFlags = 0x08;          // u32, castle stars in bits 24..30
 static const uint32_t SM64_SaveFileCourseStars = 0x0C;    // u8[25], bit 7 is the cannon
+static const uint32_t SM64_sSegmentTable = 0x0033B400;    // u32[32], physical addresses
+static const uint32_t SM64_CourseNameTable = 0x00010F68;  // in segment 2, 25 pointers (courses 1..25)
+static const uint32_t SM64_ActNameTable = 0x0001192C;     // in segment 2, 15 * 6 pointers
 
 CriticalSection CSm64Probe::m_CS;
 bool CSm64Probe::m_Supported = false;
@@ -22,11 +25,147 @@ uint8_t CSm64Probe::m_Stars[CSm64Probe::CourseCount];
 uint32_t CSm64Probe::m_ViCount = 0;
 CSm64Probe::Snapshot CSm64Probe::m_Snapshot = { false, 0, 0, 0 };
 std::vector<CSm64Probe::StarGrab> CSm64Probe::m_Grabs;
+bool CSm64Probe::m_HaveNames = false;
+CSm64Probe::Names CSm64Probe::m_Names;
 
 // RDRAM is stored as native 32 bit words
 static inline uint8_t ReadU8(const uint8_t * Rdram, uint32_t Addr) { return Rdram[Addr ^ 3]; }
 static inline int16_t ReadS16(const uint8_t * Rdram, uint32_t Addr) { return *(const int16_t *)(Rdram + (Addr ^ 2)); }
 static inline uint32_t ReadU32(const uint8_t * Rdram, uint32_t Addr) { return *(const uint32_t *)(Rdram + Addr); }
+
+std::string CSm64Probe::DecodeText(const uint8_t * Rdram, uint32_t RdramSize, uint32_t Addr)
+{
+    // SM64 (US) character set, as used by course and act names
+    std::string Text;
+    for (uint32_t i = 0; i < 100 && Addr + i < RdramSize; i++)
+    {
+        uint8_t c = ReadU8(Rdram, Addr + i);
+        if (c == 0xFF) { return Text; }
+        if (c <= 0x09) { Text += (char)('0' + c); }
+        else if (c <= 0x23) { Text += (char)('A' + c - 0x0A); }
+        else if (c <= 0x3D) { Text += (char)('a' + c - 0x24); }
+        else
+        {
+            switch (c)
+            {
+            case 0x3E: Text += '\''; break;
+            case 0x3F: Text += '.'; break;
+            case 0x6F: Text += ','; break;
+            case 0x9E: Text += ' '; break;
+            case 0x9F: Text += '-'; break;
+            case 0xE1: Text += '('; break;
+            case 0xE3: Text += ')'; break;
+            case 0xE4: Text += '+'; break;
+            case 0xE5: Text += '&'; break;
+            case 0xE6: Text += ':'; break;
+            case 0xF2: Text += '!'; break;
+            case 0xF3: Text += '%'; break;
+            case 0xF4: Text += '?'; break;
+            case 0xF5: case 0xF6: Text += '"'; break;
+            case 0xF7: Text += '~'; break;
+            case 0xFA: case 0xFD: Text += "\xE2\x98\x85"; break; // star
+            case 0xFE: Text += ' '; break; // new line
+            default: break;
+            }
+        }
+    }
+    return std::string(); // no terminator, not text
+}
+
+static std::string CleanName(std::string Name, bool StripNumber)
+{
+    // Course names start with their number (" 1 BOB-OMB BATTLEFIELD")
+    size_t Start = 0;
+    while (Start < Name.size() && Name[Start] == ' ') { Start++; }
+    if (StripNumber)
+    {
+        size_t Digits = Start;
+        while (Digits < Name.size() && Name[Digits] >= '0' && Name[Digits] <= '9') { Digits++; }
+        if (Digits > Start && (Digits == Name.size() || Name[Digits] == ' '))
+        {
+            Start = Digits;
+            while (Start < Name.size() && Name[Start] == ' ') { Start++; }
+        }
+    }
+    size_t End = Name.size();
+    while (End > Start && Name[End - 1] == ' ') { End--; }
+    Name = Name.substr(Start, End - Start);
+
+    // The game prints everything in capitals; Title Case reads better in a list
+    bool HasLower = false;
+    for (size_t i = 0; i < Name.size(); i++) { HasLower = HasLower || (Name[i] >= 'a' && Name[i] <= 'z'); }
+    if (!HasLower)
+    {
+        bool WordStart = true;
+        for (size_t i = 0; i < Name.size(); i++)
+        {
+            char & c = Name[i];
+            if (c >= 'A' && c <= 'Z' && !WordStart) { c = (char)(c - 'A' + 'a'); }
+            WordStart = c == ' ' || c == '-' || c == '(' || c == '"';
+        }
+    }
+    return Name;
+}
+
+bool CSm64Probe::ReadNames(const uint8_t * Rdram, uint32_t RdramSize, Names & Out)
+{
+    uint32_t Segment2 = ReadU32(Rdram, SM64_sSegmentTable + 2 * 4) & 0x1FFFFFFF;
+    if (Segment2 == 0 || (Segment2 & 3) != 0 || Segment2 + SM64_ActNameTable + 15 * 6 * 4 > RdramSize)
+    {
+        return false;
+    }
+
+    auto ReadEntry = [&](uint32_t TableOffset, uint32_t Index, bool StripNumber, std::string & Name) -> bool
+    {
+        uint32_t Pointer = ReadU32(Rdram, Segment2 + TableOffset + Index * 4);
+        if ((Pointer & 0xFFF00000) != 0x02000000)
+        {
+            return false;
+        }
+        uint32_t Addr = Segment2 + (Pointer & 0x000FFFFF);
+        if (Addr >= RdramSize)
+        {
+            return false;
+        }
+        Name = CleanName(DecodeText(Rdram, RdramSize, Addr), StripNumber);
+        return true;
+    };
+
+    int MainCourses = 0;
+    for (uint32_t Course = 1; Course < CourseCount; Course++)
+    {
+        if (!ReadEntry(SM64_CourseNameTable, Course - 1, true, Out.Course[Course]))
+        {
+            return false;
+        }
+        if (Course <= 15 && !Out.Course[Course].empty())
+        {
+            MainCourses++;
+        }
+    }
+    for (uint32_t Course = 1; Course <= 15; Course++)
+    {
+        for (uint32_t Act = 0; Act < 6; Act++)
+        {
+            if (!ReadEntry(SM64_ActNameTable, (Course - 1) * 6 + Act, false, Out.Act[Course][Act]))
+            {
+                return false;
+            }
+        }
+    }
+    // Before segment 2 is loaded the tables are garbage; real ones name most courses
+    return MainCourses >= 8;
+}
+
+bool CSm64Probe::GetNames(Names & Out)
+{
+    CGuard Guard(m_CS);
+    if (m_HaveNames)
+    {
+        Out = m_Names;
+    }
+    return m_HaveNames;
+}
 
 static uint64_t NowMs(void)
 {
@@ -79,6 +218,7 @@ void CSm64Probe::RomOpened(const uint8_t * Rom, uint32_t RomSize)
     m_ViCount = 0;
     m_Snapshot.Valid = false;
     m_Grabs.clear();
+    m_HaveNames = false;
 }
 
 void CSm64Probe::StateLoading(void)
@@ -123,7 +263,16 @@ void CSm64Probe::OnViRefresh(const uint8_t * Rdram, uint32_t RdramSize)
     uint8_t Stars[CourseCount];
     bool HaveStars = Valid && ReadStars(Rdram, SaveFile, Stars);
 
+    // Names never change while a ROM runs, read them once segment 2 is in memory
+    Names NewNames;
+    bool GotNames = !m_HaveNames && ReadNames(Rdram, RdramSize, NewNames);
+
     CGuard Guard(m_CS);
+    if (GotNames)
+    {
+        m_Names = NewNames;
+        m_HaveNames = true;
+    }
     m_Snapshot.Valid = Valid;
     m_Snapshot.Course = Course;
     m_Snapshot.Act = Act;

@@ -64,7 +64,13 @@ void CRomBrowser::GetFieldInfo(ROMBROWSER_FIELDS_LIST & Fields, bool UseDefault 
     AddField(Fields, "Force Feedback", -1, RB_ForceFeedback, 100, RB_FORCE_FEEDBACK, UseDefault);
     AddField(Fields, "File Format", -1, RB_FileFormat, 100, RB_FILE_FORMAT, UseDefault);
 
-    // Until the user places it themselves, show play time after the last visible column
+    // Until the user places them themselves, newer columns go after the last visible column
+    AddField(Fields, "Play Time", (int32_t)NextFreeColumn(Fields), RB_PlayTime, 100, RB_PLAYTIME, UseDefault);
+    AddField(Fields, "Stars", (int32_t)NextFreeColumn(Fields), RB_Stars, 70, RB_STARS, UseDefault);
+}
+
+size_t CRomBrowser::NextFreeColumn(const ROMBROWSER_FIELDS_LIST & Fields)
+{
     size_t NextPos = 0;
     for (bool Found = true; Found; )
     {
@@ -78,7 +84,7 @@ void CRomBrowser::GetFieldInfo(ROMBROWSER_FIELDS_LIST & Fields, bool UseDefault 
             NextPos++;
         }
     }
-    AddField(Fields, "Play Time", (int32_t)NextPos, RB_PlayTime, 100, RB_PLAYTIME, UseDefault);
+    return NextPos;
 }
 
 int32_t CRomBrowser::CalcSortPosition(uint32_t lParam)
@@ -395,7 +401,102 @@ void CRomBrowser::DeallocateBrushs(void)
 
 void CRomBrowser::RomListLoaded(void)
 {
+    m_StarCount.clear();
     RomList_SortList();
+}
+
+static int CountSm64Stars(const uint8_t * Eeprom, size_t Size)
+{
+    // SM64 save layout: 4 files, each stored twice as 0x38 byte blocks ending in a
+    // "DA" signature and a 16 bit sum of the preceding bytes
+    const size_t BlockSize = 0x38;
+    if (Size < 8 * BlockSize)
+    {
+        return -1;
+    }
+    int Best = -1;
+    for (size_t File = 0; File < 4; File++)
+    {
+        for (size_t Copy = 0; Copy < 2; Copy++)
+        {
+            const uint8_t * Block = Eeprom + (File * 2 + Copy) * BlockSize;
+            uint16_t Sum = 0;
+            for (size_t i = 0; i < BlockSize - 2; i++)
+            {
+                Sum = (uint16_t)(Sum + Block[i]);
+            }
+            if (Block[0x34] != 'D' || Block[0x35] != 'A' || Sum != ((Block[0x36] << 8) | Block[0x37]))
+            {
+                continue;
+            }
+            int Stars = 0;
+            uint8_t CastleStars = Block[0x08] & 0x7F; // flags bits 24..30
+            for (int Bit = 0; Bit < 7; Bit++) { Stars += (CastleStars >> Bit) & 1; }
+            for (size_t Course = 0; Course < 25; Course++)
+            {
+                uint8_t CourseStars = Block[0x0C + Course] & 0x7F; // bit 7 is the cannon
+                for (int Bit = 0; Bit < 7; Bit++) { Stars += (CourseStars >> Bit) & 1; }
+            }
+            // Every bit set (182) is the well known corrupted EEPROM, not real progress
+            if (Stars < 26 * 7)
+            {
+                Best = Stars > Best ? Stars : Best;
+            }
+            break; // main copy is valid, the backup holds the same data
+        }
+    }
+    return Best;
+}
+
+int CRomBrowser::StarsCollected(const ROM_INFO * pRomInfo)
+{
+    std::map<std::string, int>::const_iterator Cached = m_StarCount.find(pRomInfo->szFullFileName);
+    if (Cached != m_StarCount.end())
+    {
+        return Cached->second;
+    }
+
+    // The emulator names EEPROM saves after the ROM's internal name, or the file name when that is empty
+    char SaveName[260];
+    strncpy(SaveName, pRomInfo->InternalName, sizeof(SaveName) - 1);
+    SaveName[sizeof(SaveName) - 1] = '\0';
+    if (SaveName[0] == '\0')
+    {
+        strncpy(SaveName, CPath(pRomInfo->szFullFileName).GetName().c_str(), sizeof(SaveName) - 1);
+        CN64Rom::CleanRomName(SaveName, false);
+    }
+
+    CPath SaveDirPath(g_Settings->LoadStringVal(Directory_NativeSave).c_str(), "");
+    SaveDirPath.NormalizePath(CPath(CPath::MODULE_DIRECTORY));
+    std::string SaveDir = (const std::string &)SaveDirPath;
+    CPath SaveFile(SaveDir.c_str(), stdstr_f("%s.eep", SaveName).c_str());
+    if (g_Settings->LoadBool(Setting_UniqueSaveDir))
+    {
+        // "<name>-<md5>", the MD5 isn't known here so take the first match
+        WIN32_FIND_DATAA FindData;
+        HANDLE hFind = FindFirstFileA(CPath(SaveDir.c_str(), stdstr_f("%s-*", SaveName).c_str()), &FindData);
+        if (hFind != INVALID_HANDLE_VALUE)
+        {
+            SaveFile.AppendDirectory(FindData.cFileName);
+            FindClose(hFind);
+        }
+    }
+
+    int Stars = -1;
+    // The running emulator keeps the save open, so share it
+    HANDLE hFile = CreateFileA(SaveFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        uint8_t Eeprom[0x800];
+        DWORD Read = 0;
+        if (ReadFile(hFile, Eeprom, sizeof(Eeprom), &Read, nullptr))
+        {
+            Stars = CountSm64Stars(Eeprom, Read);
+        }
+        CloseHandle(hFile);
+    }
+    m_StarCount[pRomInfo->szFullFileName] = Stars;
+    return Stars;
 }
 
 void CRomBrowser::RomDirChanged(void)
@@ -812,6 +913,7 @@ int32_t CALLBACK CRomBrowser::RomList_CompareItems(uint32_t lParam1, uint32_t lP
         result = Stats1.Seconds < Stats2.Seconds ? -1 : (Stats1.Seconds > Stats2.Seconds ? 1 : 0);
         break;
     }
+    case RB_Stars: result = _this->StarsCollected(pRomInfo1) - _this->StarsCollected(pRomInfo2); break;
     default: result = 0; break;
     }
     return result;
@@ -918,6 +1020,20 @@ void CRomBrowser::RomList_GetDispInfo(uint32_t pnmh)
         if (CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country), Stats) && Stats.Seconds > 0)
         {
             wcsncpy(lpdi->item.pszText, CPlayTime::FormatDuration(Stats.Seconds).c_str(), lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        else
+        {
+            wcsncpy(lpdi->item.pszText, L" ", lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        break;
+    }
+    case RB_Stars:
+    {
+        // Only games with a Super Mario 64 style save file get a count
+        int Stars = StarsCollected(pRomInfo);
+        if (Stars >= 0)
+        {
+            swprintf(lpdi->item.pszText, lpdi->item.cchTextMax / sizeof(wchar_t), L"%d \x2605", Stars);
         }
         else
         {
@@ -1174,6 +1290,7 @@ void CRomBrowser::ShowRomList(void)
 {
     if (m_Visible || g_Settings->LoadBool(GameRunning_CPU_Running)) { return; }
     m_ShowingRomBrowser = true;
+    m_StarCount.clear(); // a game may have just saved new stars
     WatchThreadStop();
     if (m_hRomList == nullptr) { CreateRomListControl(); }
     EnableWindow(m_hRomList, TRUE);

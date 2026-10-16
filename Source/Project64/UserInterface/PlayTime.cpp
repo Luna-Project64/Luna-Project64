@@ -14,6 +14,7 @@ CPlayTime::CPlayTime(void) :
     m_Thread(nullptr),
     m_StopEvent(nullptr),
     m_InSession(false),
+    m_SessionNamesSaved(false),
     m_SessionSeconds(0),
     m_UnflushedSeconds(0)
 {
@@ -73,6 +74,36 @@ void CPlayTime::Start(void)
             }
         }
 
+        m_StarNames.clear();
+        CIniFile NamesIni(IniFileName("StarNames.ini").c_str(), false, true);
+        std::vector<std::string> NameSections = NamesIni.GetVectorOfSectionsSorted();
+        for (size_t i = 0; i < NameSections.size(); i++)
+        {
+            CSm64Probe::Names & Names = m_StarNames[NameSections[i]];
+            const char * Section = NameSections[i].c_str();
+            for (int Course = 1; Course < CSm64Probe::CourseCount; Course++)
+            {
+                Names.Course[Course] = NamesIni.GetString(Section, stdstr_f("C%02d", Course).c_str(), "");
+                for (int Act = 0; Course <= 15 && Act < 6; Act++)
+                {
+                    Names.Act[Course][Act] = NamesIni.GetString(Section, stdstr_f("C%02d S%d", Course, Act + 1).c_str(), "");
+                }
+            }
+        }
+
+        m_Daily.clear();
+        CIniFile LogIni(IniFileName("PlayLog.ini").c_str(), false, true);
+        std::vector<std::string> Days = LogIni.GetVectorOfSectionsSorted();
+        for (size_t i = 0; i < Days.size(); i++)
+        {
+            CIniFileBase::KeyValueData Data;
+            LogIni.GetKeyValueData(Days[i].c_str(), Data);
+            for (CIniFileBase::KeyValueData::const_iterator itr = Data.begin(); itr != Data.end(); itr++)
+            {
+                m_Daily[Days[i]][itr->first] = strtoul(itr->second.c_str(), nullptr, 10);
+            }
+        }
+
         CIniFile Ini(IniFileName("PlayTime.ini").c_str(), false, true);
         std::vector<std::string> Sections = Ini.GetVectorOfSectionsSorted();
         for (size_t i = 0; i < Sections.size(); i++)
@@ -127,6 +158,53 @@ CPlayTime::GameStatsMap CPlayTime::GetAllStats(void)
     return m_Stats;
 }
 
+bool CPlayTime::GetStarNames(const std::string & Key, CSm64Probe::Names & Names)
+{
+    CGuard Guard(m_CS);
+    std::map<std::string, CSm64Probe::Names>::const_iterator itr = m_StarNames.find(Key);
+    if (itr == m_StarNames.end())
+    {
+        return false;
+    }
+    Names = itr->second;
+    return true;
+}
+
+CPlayTime::DailyStatsMap CPlayTime::GetDailyStats(void)
+{
+    CGuard Guard(m_CS);
+    return m_Daily;
+}
+
+std::string CPlayTime::DayKey(uint32_t Time)
+{
+    time_t t = (time_t)Time;
+    struct tm Local;
+    if (localtime_s(&Local, &t) != 0)
+    {
+        return "";
+    }
+    return stdstr_f("%04d-%02d-%02d", Local.tm_year + 1900, Local.tm_mon + 1, Local.tm_mday);
+}
+
+void CPlayTime::SaveStarNames(const CSm64Probe::Names & Names)
+{
+    // Called with m_CS held
+    m_StarNames[m_SessionKey] = Names;
+    CIniFile Ini(IniFileName("StarNames.ini").c_str());
+    Ini.SetAutoFlush(false);
+    const char * Section = m_SessionKey.c_str();
+    for (int Course = 1; Course < CSm64Probe::CourseCount; Course++)
+    {
+        Ini.SaveString(Section, stdstr_f("C%02d", Course).c_str(), Names.Course[Course].c_str());
+        for (int Act = 0; Course <= 15 && Act < 6; Act++)
+        {
+            Ini.SaveString(Section, stdstr_f("C%02d S%d", Course, Act + 1).c_str(), Names.Act[Course][Act].c_str());
+        }
+    }
+    Ini.FlushChanges();
+}
+
 CPlayTime::StarStatsMap CPlayTime::GetStarStats(const std::string & Key)
 {
     CGuard Guard(m_CS);
@@ -140,6 +218,12 @@ void CPlayTime::TrackStars(uint32_t Seconds)
     if (!CSm64Probe::Supported())
     {
         return;
+    }
+    CSm64Probe::Names Names;
+    if (!m_SessionNamesSaved && CSm64Probe::GetNames(Names))
+    {
+        SaveStarNames(Names);
+        m_SessionNamesSaved = true;
     }
     StarStatsMap & Stars = m_StarStats[m_SessionKey];
 
@@ -296,6 +380,12 @@ void CPlayTime::ThreadProc(void)
         itr->second.LastPlayed = TimeNow;
         m_SessionSeconds += Seconds;
         m_UnflushedSeconds += Seconds;
+        std::string Day = DayKey(TimeNow);
+        if (!Day.empty())
+        {
+            m_Daily[Day][m_SessionKey] += Seconds;
+            m_DirtyDays.insert(Day);
+        }
         TrackStars(Seconds);
         if (m_UnflushedSeconds >= FlushIntervalSeconds)
         {
@@ -307,6 +397,7 @@ void CPlayTime::ThreadProc(void)
 void CPlayTime::BeginSession(void)
 {
     m_InSession = true;
+    m_SessionNamesSaved = false;
     m_SessionKey = g_Settings->LoadStringVal(Game_IniKey);
     m_SessionSeconds = 0;
     m_UnflushedSeconds = 0;
@@ -336,6 +427,22 @@ void CPlayTime::EndSession(void)
 void CPlayTime::Flush(void)
 {
     m_UnflushedSeconds = 0;
+    if (!m_DirtyDays.empty())
+    {
+        CIniFile LogIni(IniFileName("PlayLog.ini").c_str());
+        LogIni.SetAutoFlush(false);
+        for (std::set<std::string>::const_iterator Day = m_DirtyDays.begin(); Day != m_DirtyDays.end(); Day++)
+        {
+            const DayStats & Games = m_Daily[*Day];
+            for (DayStats::const_iterator Game = Games.begin(); Game != Games.end(); Game++)
+            {
+                LogIni.SaveString(Day->c_str(), Game->first.c_str(), stdstr_f("%u", Game->second).c_str());
+            }
+        }
+        LogIni.FlushChanges();
+        m_DirtyDays.clear();
+    }
+
     GameStatsMap::const_iterator itr = m_Stats.find(m_SessionKey);
     if (itr == m_Stats.end())
     {

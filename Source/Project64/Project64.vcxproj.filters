@@ -279,6 +279,9 @@
     <ClCompile Include="UserInterface\ProfilesConfigUI.cpp">
       <Filter>Source Files\User Interface Source</Filter>
     </ClCompile>
+    <ClCompile Include="UserInterface\PlayCalendarUI.cpp">
+      <Filter>Source Files\User Interface Source</Filter>
+    </ClCompile>
     <ClCompile Include="UserInterface\PlayStatsUI.cpp">
       <Filter>Source Files\User Interface Source</Filter>
     </ClCompile>

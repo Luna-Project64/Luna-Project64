@@ -7,6 +7,7 @@ CStarTimesDlg::CStarTimesDlg(const std::string & GameKey, const std::string & Ga
     m_SortColumn(Column_Course),
     m_SortAscending(true)
 {
+    m_HaveNames = CPlayTime::Get().GetStarNames(GameKey, m_Names);
 }
 
 std::wstring CStarTimesDlg::CourseName(int Course)
@@ -23,6 +24,28 @@ std::wstring CStarTimesDlg::StarName(int Key)
 {
     int Star = Key % 8;
     return Star == CPlayTime::StarAnyAct ? L"(no star select)" : stdstr_f("Star %d", Star + 1).ToUTF16();
+}
+
+std::wstring CStarTimesDlg::DisplayCourse(int Course)
+{
+    // Prefer the hack's own name, keep the slot number so rows still line up with the game
+    if (!m_HaveNames || Course <= 0 || Course >= CSm64Probe::CourseCount || m_Names.Course[Course].empty())
+    {
+        return CourseName(Course);
+    }
+    std::string Name = Course <= 15 ? stdstr_f("%d \xC2\xB7 ", Course) : std::string();
+    Name += m_Names.Course[Course];
+    return stdstr(Name).ToUTF16();
+}
+
+std::wstring CStarTimesDlg::DisplayStar(int Key)
+{
+    int Course = Key / 8, Star = Key % 8;
+    if (m_HaveNames && Course >= 1 && Course <= 15 && Star < 6 && !m_Names.Act[Course][Star].empty())
+    {
+        return stdstr(stdstr_f("%d \xC2\xB7 ", Star + 1) + m_Names.Act[Course][Star]).ToUTF16();
+    }
+    return StarName(Key);
 }
 
 LRESULT CStarTimesDlg::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL & /*bHandled*/)
@@ -62,7 +85,7 @@ LRESULT CStarTimesDlg::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*l
         Summary = L"Tracked: " + CPlayTime::FormatDuration(TotalSeconds) + stdstr_f(", %u star grab%s (practice grabs included).", TotalGrabs, TotalGrabs == 1 ? "" : "s").ToUTF16();
         if (MostTime != nullptr && MostTime->Stats.Seconds > 0)
         {
-            Summary += L"\nMost time: " + CourseName(MostTime->Key / 8) + L", " + StarName(MostTime->Key) + L" (" + CPlayTime::FormatDuration(MostTime->Stats.Seconds) + L")";
+            Summary += L"\nMost time: " + DisplayCourse(MostTime->Key / 8) + L", " + DisplayStar(MostTime->Key) + L" (" + CPlayTime::FormatDuration(MostTime->Stats.Seconds) + L")";
         }
         Summary += L"\nTime is counted for the star picked on the star select screen.";
     }
@@ -73,17 +96,17 @@ LRESULT CStarTimesDlg::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*l
     CRect rcList;
     m_List.GetClientRect(&rcList);
     int Width = rcList.Width() - GetSystemMetrics(SM_CXVSCROLL);
-    m_List.InsertColumn(Column_Course, L"Course", LVCFMT_LEFT, Width * 22 / 100);
-    m_List.InsertColumn(Column_Star, L"Star", LVCFMT_LEFT, Width * 24 / 100);
-    m_List.InsertColumn(Column_Time, L"Time", LVCFMT_LEFT, Width * 16 / 100);
-    m_List.InsertColumn(Column_Grabs, L"Grabs", LVCFMT_LEFT, Width * 13 / 100);
-    m_List.InsertColumn(Column_FirstGrab, L"First Grab After", LVCFMT_LEFT, Width * 25 / 100);
+    m_List.InsertColumn(Column_Course, L"Course", LVCFMT_LEFT, Width * 30 / 100);
+    m_List.InsertColumn(Column_Star, L"Star", LVCFMT_LEFT, Width * 34 / 100);
+    m_List.InsertColumn(Column_Time, L"Time", LVCFMT_LEFT, Width * 10 / 100);
+    m_List.InsertColumn(Column_Grabs, L"Grabs", LVCFMT_LEFT, Width * 8 / 100);
+    m_List.InsertColumn(Column_FirstGrab, L"First Grab After", LVCFMT_LEFT, Width * 18 / 100);
 
     for (size_t i = 0; i < m_Rows.size(); i++)
     {
         const Row & r = m_Rows[i];
-        int Item = m_List.InsertItem(LVIF_TEXT | LVIF_PARAM, (int)i, CourseName(r.Key / 8).c_str(), 0, 0, 0, (LPARAM)i);
-        m_List.SetItemText(Item, Column_Star, StarName(r.Key).c_str());
+        int Item = m_List.InsertItem(LVIF_TEXT | LVIF_PARAM, (int)i, DisplayCourse(r.Key / 8).c_str(), 0, 0, 0, (LPARAM)i);
+        m_List.SetItemText(Item, Column_Star, DisplayStar(r.Key).c_str());
         m_List.SetItemText(Item, Column_Time, r.Stats.Seconds > 0 ? CPlayTime::FormatDuration(r.Stats.Seconds).c_str() : L"");
         m_List.SetItemText(Item, Column_Grabs, r.Stats.Grabs > 0 ? stdstr_f("%u", r.Stats.Grabs).ToUTF16().c_str() : L"");
         m_List.SetItemText(Item, Column_FirstGrab, r.Stats.Grabs > 0 ? CPlayTime::FormatDuration(r.Stats.FirstGrabAfter).c_str() : L"");

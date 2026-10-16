@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "PlayStatsUI.h"
 #include "StarTimesUI.h"
+#include "PlayCalendarUI.h"
 
 CPlayStatsDlg::CPlayStatsDlg(void) :
     m_SortColumn(Column_PlayTime),
@@ -127,6 +128,12 @@ LRESULT CPlayStatsDlg::OnDoubleClick(LPNMHDR /*pnmh*/)
 LRESULT CPlayStatsDlg::OnStarTimes(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL & /*bHandled*/)
 {
     ShowStarTimes();
+    return 0;
+}
+
+LRESULT CPlayStatsDlg::OnCalendar(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL & /*bHandled*/)
+{
+    CPlayCalendarDlg().DoModal(m_hWnd);
     return 0;
 }
 

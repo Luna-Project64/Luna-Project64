@@ -1,6 +1,8 @@
 #pragma once
 #include <Common/CriticalSection.h>
+#include <Project64-core/N64System/Sm64Probe.h>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -39,6 +41,13 @@ public:
     static int StarKey(int Course, int Star) { return Course * 8 + Star; }
 
     StarStatsMap GetStarStats(const std::string & Key);
+    bool GetStarNames(const std::string & Key, CSm64Probe::Names & Names);
+
+    // Seconds played per day ("YYYY-MM-DD", local time) and game
+    typedef std::map<std::string, uint32_t> DayStats;
+    typedef std::map<std::string, DayStats> DailyStatsMap;
+    DailyStatsMap GetDailyStats(void);
+    static std::string DayKey(uint32_t Time);
 
     static CPlayTime & Get(void);
 
@@ -69,11 +78,16 @@ private:
     void EndSession(void);
     void Flush(void);
     void TrackStars(uint32_t Seconds);
+    void SaveStarNames(const CSm64Probe::Names & Names);
     std::string IniFileName(const char * FileName);
 
     CriticalSection m_CS;
     GameStatsMap m_Stats;
     std::map<std::string, StarStatsMap> m_StarStats;
+    std::map<std::string, CSm64Probe::Names> m_StarNames;
+    bool m_SessionNamesSaved;
+    DailyStatsMap m_Daily;
+    std::set<std::string> m_DirtyDays;
     HANDLE m_Thread;
     HANDLE m_StopEvent;
 

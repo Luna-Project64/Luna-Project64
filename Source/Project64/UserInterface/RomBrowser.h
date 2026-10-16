@@ -108,8 +108,12 @@ private:
         RB_Developer = 12, RB_Crc1 = 13, RB_Crc2 = 14,
         RB_CICChip = 15, RB_ReleaseDate = 16, RB_Genre = 17,
         RB_Players = 18, RB_ForceFeedback = 19, RB_FileFormat = 20,
-        RB_PlayTime = 21
+        RB_PlayTime = 21, RB_Stars = 22
     };
+
+    int StarsCollected(const ROM_INFO * pRomInfo);
+    static size_t NextFreeColumn(const ROMBROWSER_FIELDS_LIST & Fields);
+    std::map<std::string, int> m_StarCount; // ROM file -> stars in its save, -1 if none
 
     enum
     {
