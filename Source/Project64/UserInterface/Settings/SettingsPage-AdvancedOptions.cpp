@@ -49,6 +49,7 @@ void CAdvancedOptionsPage::Init()
         ComboBox->AddItem(wGS(STR_FR_DLS).c_str(), FR_DLs);
         ComboBox->AddItem(wGS(STR_FR_PERCENT).c_str(), FR_PERCENT);
         ComboBox->AddItem(wGS(STR_FR_DLS_VIS).c_str(), FR_VIs_DLs);
+        ComboBox->AddItem(wGS(STR_FR_FPS).c_str(), FR_FPS);
     }
 
     UpdatePageSettings();

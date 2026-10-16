@@ -524,6 +524,7 @@ void CLanguage::LoadDefaultStrings(void)
     DEF_STR(STR_FR_DLS, "Display lists per second");
     DEF_STR(STR_FR_PERCENT, "Percentage of full speed");
     DEF_STR(STR_FR_DLS_VIS, "VI/s & DL/s");
+    DEF_STR(STR_FR_FPS, "Game frames per second (FPS)");
 
     // Increase speed
     DEF_STR(STR_INSREASE_SPEED, "Increase Game Speed");
