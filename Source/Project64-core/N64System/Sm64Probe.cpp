@@ -226,10 +226,10 @@ void CSm64Probe::RomOpened(const uint8_t * Rom, uint32_t RomSize)
 
 int CSm64Probe::CountStars(const uint8_t (&Stars)[CourseCount], uint8_t CourseMask)
 {
-    // Stars[0] holds the castle stars, Stars[1..] the raw course bytes
+    // Stars[0] holds the castle star bits, Stars[1..] the raw course bytes;
+    // CourseMask 0xFF also counts each 8th bit, as 8-star hacks do
     int Count = 0;
-    for (int Bit = 0; Bit < 7; Bit++) { Count += (Stars[0] >> Bit) & 1; }
-    for (int Course = 1; Course < CourseCount; Course++)
+    for (int Course = 0; Course < CourseCount; Course++)
     {
         uint8_t Bits = Stars[Course] & CourseMask;
         for (int Bit = 0; Bit < 8; Bit++) { Count += (Bits >> Bit) & 1; }
@@ -258,7 +258,8 @@ bool CSm64Probe::ReadStars(const uint8_t * Rdram, int16_t SaveFile, uint8_t (&St
     }
     // Each save file is stored twice (main and backup)
     uint32_t File = SM64_gSaveBuffer + (SaveFile - 1) * 2 * SM64_SaveFileSize;
-    Stars[0] = (uint8_t)((ReadU32(Rdram, File + SM64_SaveFileFlags) >> 24) & 0x7F);
+    // Flags bits 24..31: castle stars, bit 31 being an 8th star in some hacks
+    Stars[0] = (uint8_t)(ReadU32(Rdram, File + SM64_SaveFileFlags) >> 24);
     for (int Course = 1; Course < CourseCount; Course++)
     {
         // Raw byte: bit 7 is the cannon, or an 8th star in some hacks

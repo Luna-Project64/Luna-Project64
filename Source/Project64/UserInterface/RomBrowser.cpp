@@ -430,8 +430,9 @@ static int CountSm64Stars(const uint8_t * Eeprom, size_t Size, bool CannonStars)
                 continue;
             }
             int Stars = 0;
-            uint8_t CastleStars = Block[0x08] & 0x7F; // flags bits 24..30
-            for (int Bit = 0; Bit < 7; Bit++) { Stars += (CastleStars >> Bit) & 1; }
+            // Flags bits 24..30, plus bit 31 as an 8th castle star in 8-star hacks
+            uint8_t CastleStars = Block[0x08] & (CannonStars ? 0xFF : 0x7F);
+            for (int Bit = 0; Bit < 8; Bit++) { Stars += (CastleStars >> Bit) & 1; }
             for (size_t Course = 0; Course < 25; Course++)
             {
                 // Bit 7 is the cannon, unless the hack turned it into an 8th star
