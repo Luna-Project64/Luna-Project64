@@ -3,6 +3,7 @@
 #include <Project64-core/Notification.h>
 #include <Project64-core/N64System/SummerCart.h>
 #include <Project64-core/N64System/SystemGlobals.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/HostScheduler.h>
 #include <Common/Util.h>
 
@@ -22,9 +23,11 @@ void CN64System::StartEmulationThread(CThread * thread)
 #ifdef _WIN32
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 #endif
+    CFramePacing::Start();
 
     EmulationStarting(thread);
 
+    CFramePacing::Stop();
 #ifdef _WIN32
     CoUninitialize();
 #endif

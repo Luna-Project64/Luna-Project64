@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include <Project64-core/N64System/Mips/MemoryVirtualMem.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/N64System/N64Rom.h>
 #include <Project64-core/N64System/N64System.h>
@@ -2021,7 +2022,9 @@ void CMipsMemoryVM::Write32DPCommandRegisters(void)
         g_Reg->DPC_END_REG = m_MemLookupValue.UW[0];
         if (g_Plugins->Gfx()->ProcessRDPList)
         {
+            bool GfxCost = CFramePacing::Enter(FrameCost_Gfx);
             g_Plugins->Gfx()->ProcessRDPList();
+            if (GfxCost) { CFramePacing::Leave(); }
         }
         break;
         //case 0x04100008: g_Reg->DPC_CURRENT_REG = Value; break;
@@ -2269,6 +2272,7 @@ void CMipsMemoryVM::Write32AudioInterface(void)
         {
             if (g_Plugins->Audio()->AiLenChanged != nullptr)
             {
+                CFrameCost Cost(FrameCost_Audio);
                 g_Plugins->Audio()->AiLenChanged();
             }
         }

@@ -64,6 +64,7 @@ enum SettingID
 	Setting_Enhancement,
     Setting_DiskSaveType,
     Setting_HighPerformanceScheduling,
+    Setting_FramePacingLog,
 
     // Default settings
     Default_RDRamSize,

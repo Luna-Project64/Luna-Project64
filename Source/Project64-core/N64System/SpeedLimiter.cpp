@@ -69,7 +69,8 @@ CSpeedLimiter::CSpeedLimiter() :
     m_Anchor(0),
     m_FramesSinceAnchor(0),
     m_FpsWindowStart(0),
-    m_FpsFrames(0)
+    m_FpsFrames(0),
+    m_LastWait()
 {
 #ifdef _WIN32
     LARGE_INTEGER Frequency;
@@ -125,6 +126,7 @@ void CSpeedLimiter::Anchor(int64_t Now)
 {
     m_Anchor = Now;
     m_FramesSinceAnchor = 0;
+    m_LastWait.Reanchored = true;
 }
 
 // Sleeps on the high resolution timer until the deadline. A late wake isn't
@@ -185,6 +187,8 @@ bool CSpeedLimiter::Timer_Process(uint32_t * FrameRate, uint32_t * FrameRateFrac
         Speed = 1;
     }
 
+    m_LastWait = WaitInfo();
+
     // Start a fresh schedule on this frame without waiting: after a reset, a
     // savestate load or a speed change, sleeping a whole period on top of the
     // work this frame has already done would show up as a long frame.
@@ -204,14 +208,18 @@ bool CSpeedLimiter::Timer_Process(uint32_t * FrameRate, uint32_t * FrameRateFrac
     if (Now < Deadline)
     {
         WaitUntil(Deadline);
-        Now = Ticks();
+        int64_t Woke = Ticks();
+        m_LastWait.Requested = Deadline - Now;
+        m_LastWait.Actual = Woke - Now;
+        Now = Woke;
     }
     else
     {
         // A frame that overran by less than a period is absorbed by not
         // waiting. Anything bigger was a stall; restart the schedule from
         // here instead of bursting frames out back to back to catch up.
-        if (Now - Deadline > Period)
+        m_LastWait.Late = Now - Deadline;
+        if (m_LastWait.Late > Period)
         {
             Anchor(Now);
         }

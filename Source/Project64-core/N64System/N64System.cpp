@@ -2,6 +2,7 @@
 #include "N64SYstem.h"
 #include <Project64-core/3rdParty/zip.h>
 #include <Project64-core/InputDelayer.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/Recompiler/RecompilerCodeLog.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/N64System/Mips/Mempak.h>
@@ -820,6 +821,7 @@ void CN64System::Pause()
     }
     m_hPauseEvent.IsTriggered(SyncEvent::INFINITE_TIMEOUT);
     m_hPauseEvent.Reset();
+    CFramePacing::Paused();
     g_Settings->SaveBool(GameRunning_CPU_Paused, (uint32_t)false);
     if (pause_type == PauseType_FromMenu)
     {
@@ -1791,6 +1793,7 @@ void CN64System::DumpSyncErrors(CN64System * SecondCPU)
 bool CN64System::SaveState()
 {
     WriteTrace(TraceN64System, TraceDebug, "Start");
+    CFrameCost Cost(FrameCost_State);
 
     HighResTimeStamp Start = m_Limiter.Now();
 
@@ -2074,6 +2077,7 @@ bool CN64System::SaveState()
 bool CN64System::LoadState()
 {
     WriteTrace(TraceN64System, TraceDebug, "Start");
+    CFrameCost Cost(FrameCost_State);
 
     stdstr InstantFileName = g_Settings->LoadStringVal(GameRunning_InstantSaveFile);
     if (!InstantFileName.empty())
@@ -2161,6 +2165,7 @@ bool CN64System::LoadState()
 
 bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
 {
+    CFrameCost Cost(FrameCost_State);
     HighResTimeStamp Start = m_Limiter.Now();
 
     uint32_t SaveRDRAMSize, NextVITimer = 0, old_status, old_width, old_dacrate;
@@ -2294,6 +2299,7 @@ bool CN64System::LoadState(const char * FileName)
     WriteTrace(TraceN64System, TraceDebug, "(%s): Start", FileName);
 
     HighResTimeStamp Start = m_Limiter.Now();
+    CFrameCost Cost(FrameCost_State);
 
     uint32_t Value, SaveRDRAMSize, NextVITimer = 0, old_status, old_width, old_dacrate;
     bool LoadedZipFile = false, AudioResetOnLoad;
@@ -2650,6 +2656,7 @@ void CN64System::RunRSP()
                 }
             }
 
+            bool RspCost = CFramePacing::Enter(FrameCost_Rsp);
             __except_try()
             {
                 WriteTrace(TraceRSP, TraceDebug, "Do cycles - starting");
@@ -2661,6 +2668,7 @@ void CN64System::RunRSP()
                 WriteTrace(TraceRSP, TraceError, "Exception generated");
                 g_Notify->FatalError("CN64System::RunRSP()\nUnknown memory action\n\nEmulation stopping");
             }
+            if (RspCost) { CFramePacing::Leave(); }
 
             if (Task == 1 && bDelayDP() && ((m_Reg.m_GfxIntrReg & MI_INTR_DP) != 0))
             {
@@ -2710,6 +2718,7 @@ void CN64System::ResumeRSP()
     g_Reg->SP_SEMAPHORE_REG = 0;
     if (prevValue && *g_Plugins->RSP()->m_RspYieldedOnSemaphore)
     {
+        bool RspCost = CFramePacing::Enter(FrameCost_Rsp);
         __except_try()
         {
             WriteTrace(TraceRSP, TraceDebug, "Resume cycles - starting");
@@ -2721,6 +2730,7 @@ void CN64System::ResumeRSP()
             WriteTrace(TraceRSP, TraceError, "Exception generated");
             g_Notify->FatalError("CN64System::RunRSP()\nUnknown memory action\n\nEmulation stopping");
         }
+        if (RspCost) { CFramePacing::Leave(); }
     }
 }
 
@@ -2752,6 +2762,7 @@ void CN64System::RefreshScreen()
 
     if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateScreen); }
 
+    bool GfxCost = CFramePacing::Enter(FrameCost_Gfx);
     __except_try()
     {
         WriteTrace(TraceGFXPlugin, TraceDebug, "UpdateScreen starting");
@@ -2766,13 +2777,21 @@ void CN64System::RefreshScreen()
     {
         WriteTrace(TraceGFXPlugin, TraceError, "Exception caught");
     }
+    if (GfxCost) { CFramePacing::Leave(); }
     g_MMU->UpdateFieldSerration((m_Reg.VI_STATUS_REG & 0x40) != 0);
 
     if ((bBasicMode() || bLimitFPS()) && (!bSyncToAudio() || !FullSpeed()))
     {
         if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_Idel); }
         uint32_t FrameRate = 0, FrameRateFraction = 0;
+        bool WaitCost = CFramePacing::Enter(FrameCost_Wait);
         bool FrameRateReady = m_Limiter.Timer_Process(&FrameRate, &FrameRateFraction);
+        if (WaitCost) { CFramePacing::Leave(); }
+        if (this == g_BaseSystem)
+        {
+            const CSpeedLimiter::WaitInfo & Wait = m_Limiter.LastWait();
+            CFramePacing::RecordLimiter(Wait.Requested, Wait.Actual, Wait.Late, Wait.Reanchored);
+        }
         if (FrameRateReady && bDisplayFrameRate())
         {
             m_FPS.DisplayViCounter(FrameRate, FrameRateFraction);
@@ -2791,6 +2810,10 @@ void CN64System::RefreshScreen()
             m_FPS.UpdateViCounter();
             m_bCleanFrameBox = true;
         }
+    }
+    if (this == g_BaseSystem)
+    {
+        CFramePacing::FrameEnd(m_Limiter.GetSpeed());
     }
 
     if (m_bCleanFrameBox && !bDisplayFrameRate())

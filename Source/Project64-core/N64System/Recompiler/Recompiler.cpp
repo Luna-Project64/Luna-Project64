@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include <Common/SipHash.h>
 #include <Project64-core/N64System/Recompiler/Recompiler.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/N64System/Recompiler/RecompilerCodeLog.h>
 #include <Project64-core/N64System/N64System.h>
@@ -939,6 +940,7 @@ void CRecompiler::RecompilerMain_ChangeMemory()
 
 CCompiledFunc * CRecompiler::CompileCode()
 {
+    CFrameCost Cost(FrameCost_Compile);
     WriteTrace(TraceRecompiler, TraceDebug, "Start (PC: %X)", PROGRAM_COUNTER);
 
     uint32_t pAddr = 0;

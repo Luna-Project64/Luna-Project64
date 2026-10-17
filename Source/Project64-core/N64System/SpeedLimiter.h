@@ -16,6 +16,16 @@ class CSpeedLimiter :
 public:
 	enum ESpeedChange { INCREASE_SPEED, DECREASE_SPEED };
 
+    // What the last call to Timer_Process did, for the frame pacing log.
+    // All values are QueryPerformanceCounter ticks.
+    struct WaitInfo
+    {
+        int64_t Requested;  // how long the frame needed to wait for its deadline
+        int64_t Actual;     // how long the wait really took
+        int64_t Late;       // how far past its deadline the frame already was (0 if it waited)
+        bool Reanchored;    // the schedule restarted at this frame
+    };
+
     CSpeedLimiter();
     ~CSpeedLimiter();
 
@@ -33,6 +43,8 @@ public:
     int GetBaseSpeed(void) const;
     void AdjustTime(HighResTimeStamp);
     void Reset();
+
+    const WaitInfo & LastWait(void) const { return m_LastWait; }
 
     static HighResTimeStamp Now(void)
     {
@@ -66,6 +78,7 @@ private:
     uint64_t m_FramesSinceAnchor;
     int64_t m_FpsWindowStart;
     uint32_t m_FpsFrames;
+    WaitInfo m_LastWait;
 
 	static const uint32_t m_DefaultSpeed;
 
