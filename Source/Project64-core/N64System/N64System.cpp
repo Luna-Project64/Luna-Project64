@@ -13,6 +13,7 @@
 #include <Project64-core/N64System/Enhancement/Enhancements.h>
 #include <Project64-core/N64System/N64Rom.h>
 #include <Project64-core/N64System/SummerCart.h>
+#include <Project64-core/N64System/SaveStateInfo.h>
 #include <Project64-core/ExceptionHandler.h>
 #include <Project64-core/Logging.h>
 #include <Project64-core/Debugger.h>
@@ -1803,7 +1804,8 @@ bool CN64System::SaveState()
 
     CPath SaveFile(g_Settings->LoadStringVal(GameRunning_InstantSaveFile));
     int Slot = 0;
-    if (((const std::string &)SaveFile).empty())
+    bool SlotSave = ((const std::string &)SaveFile).empty();
+    if (SlotSave)
     {
         SaveFile = CPath(g_Settings->LoadStringVal(Directory_InstantSave).c_str(), "");
         if (g_Settings->LoadBool(Setting_UniqueSaveDir))
@@ -2061,6 +2063,11 @@ bool CN64System::SaveState()
 #ifdef RETROACHIEVEMENTS
     RA_OnSaveState(SaveFile);
 #endif
+
+    if (SlotSave)
+    {
+        CSaveStateInfo::CaptureThumbnail(g_Settings->LoadDword(Game_CurrentSaveState));
+    }
 
     g_Notify->DisplayMessage(3, stdstr_f("%s %s", g_Lang->GetString(MSG_SAVED_STATE).c_str(), stdstr(SaveFile.GetNameExtension()).c_str()).c_str());
     WriteTrace(TraceN64System, TraceDebug, "Done");
