@@ -182,6 +182,7 @@ void CSettings::AddHowToHandleSetting(const char* BaseDirectory)
     AddHandler(Setting_LanguageDir, new CSettingTypeApplicationPath("Lang Directory", "Directory", Setting_LanguageDirDefault));
 	AddHandler(Setting_SyncViaAudioEnabled, new CSettingTypeTempBool(false, "SyncViaAudioEnabled"));
     AddHandler(Setting_DiskSaveType, new CSettingTypeApplication("Settings", "Disk Save Type", (uint32_t)1));
+    AddHandler(Setting_HighPerformanceScheduling, new CSettingTypeApplication("Settings", "High Performance Scheduling", true));
 
 	AddHandler(Default_RDRamSize, new CSettingTypeApplication("Defaults", "RDRAM Size", 0x800000u));
 	AddHandler(Default_UseHleGfx, new CSettingTypeApplication("Defaults", "HLE GFX Default", true));

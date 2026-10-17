@@ -3,6 +3,7 @@
 #include <Project64-core/Notification.h>
 #include <Project64-core/N64System/SummerCart.h>
 #include <Project64-core/N64System/SystemGlobals.h>
+#include <Project64-core/N64System/HostScheduler.h>
 #include <Common/Util.h>
 
 void  CN64System::StartEmulationThead()
@@ -17,20 +18,17 @@ void  CN64System::StartEmulationThead()
 void CN64System::StartEmulationThread(CThread * thread)
 {
     WriteTrace(TraceN64System, TraceDebug, "Start");
+    CHostScheduler::EnterEmulation();
 #ifdef _WIN32
-    if (g_Settings->LoadBool(Setting_CN64TimeCritical))
-    {
-        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-    }
-
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-
-    EmulationStarting(thread);
-
-    CoUninitialize();
-#else
-    EmulationStarting(thread);
 #endif
+
+    EmulationStarting(thread);
+
+#ifdef _WIN32
+    CoUninitialize();
+#endif
+    CHostScheduler::LeaveEmulation();
     WriteTrace(TraceN64System, TraceDebug, "Done");
 }
 
