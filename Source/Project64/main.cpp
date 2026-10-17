@@ -4,6 +4,7 @@
 #include <Project64-core/AppInit.h>
 #include <Project64-core/VersionLuna.h>
 #include "UserInterface/WelcomeScreen.h"
+#include "UserInterface/PlayTime.h"
 #include "Settings/UISettings.h"
 
 #define MAX_PATH_LENGTH 1024
@@ -73,6 +74,7 @@ int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /
         g_Debugger = &Debugger;
         g_Plugins->SetRenderWindows(&MainWindow, &HiddenWindow);
         Notify().SetMainWindow(&MainWindow);
+        CPlayTime::Get().Start();
 
         if (!g_Lang->IsLanguageLoaded())
         {
@@ -155,6 +157,7 @@ int WINAPI WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /
             delete g_BaseSystem;
             g_BaseSystem = nullptr;
         }
+        CPlayTime::Get().Stop();
         WriteTrace(TraceUserInterface, TraceDebug, "System closed");
     }
     catch (...)

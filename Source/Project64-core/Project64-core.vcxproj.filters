@@ -357,6 +357,9 @@
     <ClCompile Include="N64System\SummerCart.cpp">
       <Filter>Header Files\N64 System</Filter>
     </ClCompile>
+    <ClCompile Include="N64System\SaveStateInfo.cpp">
+      <Filter>Source Files\N64 System</Filter>
+    </ClCompile>
     <ClCompile Include="InputDelayer.cpp">
       <Filter>Source Files\N64 System</Filter>
     </ClCompile>
@@ -708,6 +711,9 @@
       <Filter>Header Files\Settings\SettingType</Filter>
     </ClInclude>
     <ClInclude Include="N64System\SummerCart.h">
+      <Filter>Header Files\N64 System</Filter>
+    </ClInclude>
+    <ClInclude Include="N64System\SaveStateInfo.h">
       <Filter>Header Files\N64 System</Filter>
     </ClInclude>
     <ClInclude Include="InputDelayer.h">
