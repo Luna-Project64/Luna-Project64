@@ -180,6 +180,7 @@ void CSettings::AddHowToHandleSetting(const char* BaseDirectory)
     AddHandler(Setting_EnableDisk, new CSettingTypeTempBool(false));
     AddHandler(Setting_LanguageDirDefault, new CSettingTypeRelativePath("Lang", ""));
     AddHandler(Setting_LanguageDir, new CSettingTypeApplicationPath("Lang Directory", "Directory", Setting_LanguageDirDefault));
+    AddHandler(Setting_NtscFrameRate, new CSettingTypeApplication("Settings", "NTSC Frame Rate", false));
 	AddHandler(Setting_SyncViaAudioEnabled, new CSettingTypeTempBool(false, "SyncViaAudioEnabled"));
     AddHandler(Setting_DiskSaveType, new CSettingTypeApplication("Settings", "Disk Save Type", (uint32_t)1));
 

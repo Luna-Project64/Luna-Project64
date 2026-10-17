@@ -61,140 +61,168 @@ static void unsetAccurateTimerResolution()
 const uint32_t CSpeedLimiter::m_DefaultSpeed = 60;
 
 CSpeedLimiter::CSpeedLimiter() :
-    m_Frames(0),
     m_Speed(m_DefaultSpeed),
-    m_BaseSpeed(m_DefaultSpeed)
+    m_ReanchorPending(true),
+    m_NtscRate(false),
+    m_BaseSpeed(m_DefaultSpeed),
+    m_Frequency(1),
+    m_ActiveSpeed(m_DefaultSpeed),
+    m_ActiveNtsc(false),
+    m_Anchor(0),
+    m_FramesSinceAnchor(0),
+    m_FpsWindowStart(0),
+    m_FpsFrames(0)
 {
 #ifdef _WIN32
+    LARGE_INTEGER Frequency;
+    QueryPerformanceFrequency(&Frequency);
+    m_Frequency = Frequency.QuadPart;
+
     setAccurateTimerResolution();
     m_Timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     if (!m_Timer)
         m_Timer = CreateWaitableTimer(nullptr, FALSE, nullptr);
+#else
+    m_Frequency = 1000000;
 #endif
 }
 
 CSpeedLimiter::~CSpeedLimiter()
 {
 #ifdef _WIN32
-    CloseHandle(m_Timer);
+    if (m_Timer)
+    {
+        CloseHandle(m_Timer);
+    }
     unsetAccurateTimerResolution();
+#endif
+}
+
+int64_t CSpeedLimiter::Ticks(void)
+{
+#ifdef _WIN32
+    LARGE_INTEGER Value;
+    QueryPerformanceCounter(&Value);
+    return Value.QuadPart;
+#else
+    HighResTimeStamp Time;
+    Time.SetToNow();
+    return (int64_t)Time.GetMicroSeconds();
 #endif
 }
 
 void CSpeedLimiter::SetHertz(uint32_t Hertz)
 {
-    m_Speed = Hertz;
+    m_Speed.store(Hertz, std::memory_order_relaxed);
     m_BaseSpeed = Hertz;
     FixSpeedRatio();
 }
 
 void CSpeedLimiter::FixSpeedRatio()
 {
-	m_HighResSecondsPerFrame.SetMicroSeconds(1000000 / m_Speed);
-    m_Frames = 0;
+    m_ReanchorPending.store(true, std::memory_order_relaxed);
 }
 
-struct RecordedFrame
+void CSpeedLimiter::Anchor(int64_t Now)
 {
-    HighResTimeStamp calculatedTime;
-    HighResTimeStamp lastTime;
-    HighResTimeStamp currentTime;
-    uint32_t lastFrames;
-    char reset;
-};
+    m_Anchor = Now;
+    m_FramesSinceAnchor = 0;
+}
 
-#define MS_RESET_TIME 70
-
-bool CSpeedLimiter::Timer_Process(uint32_t* FrameRate)
+// Sleeps on the high resolution timer until the deadline. A late wake isn't
+// lost: the next deadline stays where it was, so the next wait is shorter.
+void CSpeedLimiter::WaitUntil(int64_t Deadline)
 {
-    if (-2 == m_Frames)
+    int64_t Remaining = Deadline - Ticks();
+    if (Remaining <= 0)
     {
-        m_Frames = -1;
-        return false;
+        return;
     }
-    if (-1 == m_Frames)
-    {
-        m_Frames = 0;
-        m_LastTime.SetToNow();
-    }
-
-    struct RecordedFrame record {};
-    record.lastFrames = m_Frames++;
-    record.lastTime = m_LastTime;
-    HighResTimeStamp CurrentTime;
-    CurrentTime.SetToNow();
-    record.currentTime = CurrentTime;
-
-    // Calculate time that should have elapsed for this frame
-    HighResTimeStamp LastTime = m_LastTime;
-    if (LastTime.Raw() == 0)
-    {
-        m_Frames = 0;
-        m_LastTime = CurrentTime;
-        return true;
-    }
-
-    HighResTimeStamp CalculatedTime;
-    record.calculatedTime = (CalculatedTime = LastTime + (m_HighResSecondsPerFrame * m_Frames));
-	uint64_t diff = (CurrentTime - LastTime).GetMicroSeconds();
-    bool reset = diff >= 1000000;
-
-    if (CurrentTime < CalculatedTime)
-    {
-        uint64_t time = (CalculatedTime - CurrentTime).Get100NanoSeconds();
-        if (time > 0)
-        {
 #ifdef _WIN32
-            LARGE_INTEGER left;
-            left.QuadPart = -time;
-            SetWaitableTimer(m_Timer, &left, 0, nullptr, nullptr, false);
-            WaitForSingleObject(m_Timer, INFINITE);
-#else
-            pjutil::Sleep((time / 1000) + 1);
-#endif
-        }
-        // Refresh current time
-        CurrentTime.SetToNow();
+    LARGE_INTEGER DueTime;
+    DueTime.QuadPart = -(LONGLONG)(Remaining * 10000000 / m_Frequency);
+    if (DueTime.QuadPart < 0 && m_Timer != nullptr && SetWaitableTimer(m_Timer, &DueTime, 0, nullptr, nullptr, FALSE))
+    {
+        WaitForSingleObject(m_Timer, INFINITE);
     }
     else
     {
-        // this is a new code - if we are falling very behind, try to reset the timer
-        HighResTimeStamp time = CurrentTime - CalculatedTime;
-        reset = time.GetMicroSeconds() > MS_RESET_TIME * 1000;
+        Sleep((DWORD)((Remaining * 1000 + m_Frequency - 1) / m_Frequency));
     }
-
-    record.reset = reset;
-
-#ifdef DEBUG_ENABLE_TIMER_TRACING
-    if (sFramesLeftToRecord)
-    {
-        sRecordedFrames.push_back(record);
-        sFramesLeftToRecord--;
-    }
-    else if (!sRecordedFrames.empty())
-    {
-        FILE* fd = fopen(getRecordsPath(), "w");
-        if (fd)
-        {
-            for (const auto& record : sRecordedFrames)
-            {
-                fprintf(fd, "calc=%lf cur=%ld diff=%lf time=%ld frames=%ld%s\n", record.calculatedTime, record.currentTime, record.calculatedTime - record.currentTime, record.lastTime, record.lastFrames, record.reset ? " reset" : "");
-            }
-            fclose(fd);
-        }
-        sRecordedFrames.clear();
-    }
+#else
+    pjutil::Sleep((uint32_t)(Remaining / 1000) + 1);
 #endif
+}
 
-    if (reset)
+bool CSpeedLimiter::CountFrame(int64_t Now, uint32_t * const FrameRate, uint32_t * const FrameRateFraction)
+{
+    if (m_FpsWindowStart == 0)
     {
-        // Output FPS
-        if (FrameRate != nullptr) { *FrameRate = m_Frames; }
-        m_Frames = 0;
-        m_LastTime = CurrentTime;
-        return true;
+        m_FpsWindowStart = Now;
+        m_FpsFrames = 0;
+        return false;
     }
-    return false;
+
+    m_FpsFrames += 1;
+    int64_t Elapsed = Now - m_FpsWindowStart;
+    if (Elapsed < m_Frequency)
+    {
+        return false;
+    }
+
+    uint64_t CentiFps = (uint64_t)m_FpsFrames * (uint64_t)m_Frequency * 100 / (uint64_t)Elapsed;
+    if (FrameRate != nullptr) { *FrameRate = (uint32_t)(CentiFps / 100); }
+    if (FrameRateFraction != nullptr) { *FrameRateFraction = (uint32_t)(CentiFps % 100); }
+    m_FpsWindowStart = Now;
+    m_FpsFrames = 0;
+    return true;
+}
+
+bool CSpeedLimiter::Timer_Process(uint32_t * FrameRate, uint32_t * FrameRateFraction)
+{
+    int64_t Now = Ticks();
+    uint32_t Speed = m_Speed.load(std::memory_order_relaxed);
+    if (Speed == 0)
+    {
+        Speed = 1;
+    }
+
+    // Start a fresh schedule on this frame without waiting: after a reset, a
+    // savestate load or a speed change, sleeping a whole period on top of the
+    // work this frame has already done would show up as a long frame.
+    bool Ntsc = m_NtscRate.load(std::memory_order_relaxed) && m_BaseSpeed == m_DefaultSpeed;
+    if (m_ReanchorPending.exchange(false, std::memory_order_relaxed) || Speed != m_ActiveSpeed || Ntsc != m_ActiveNtsc || m_Anchor == 0)
+    {
+        m_ActiveSpeed = Speed;
+        m_ActiveNtsc = Ntsc;
+        Anchor(Now);
+        return CountFrame(Now, FrameRate, FrameRateFraction);
+    }
+
+    // Deadlines are an exact fraction of a second from the anchor, so the
+    // schedule never drifts and an oversleep on one frame is paid back by a
+    // shorter wait on the next.
+    // At the NTSC rate every period is stretched by 1001/1000.
+    m_FramesSinceAnchor += 1;
+    uint64_t Numerator = Ntsc ? 1001 : 1000;
+    int64_t Period = (int64_t)((uint64_t)m_Frequency * Numerator / ((uint64_t)Speed * 1000));
+    int64_t Deadline = m_Anchor + (int64_t)(m_FramesSinceAnchor * (uint64_t)m_Frequency * Numerator / ((uint64_t)Speed * 1000));
+    if (Now < Deadline)
+    {
+        WaitUntil(Deadline);
+        Now = Ticks();
+    }
+    else
+    {
+        // A frame that overran by less than a period is absorbed by not
+        // waiting. Anything bigger was a stall; restart the schedule from
+        // here instead of bursting frames out back to back to catch up.
+        if (Now - Deadline > Period)
+        {
+            Anchor(Now);
+        }
+    }
+    return CountFrame(Now, FrameRate, FrameRateFraction);
 }
 
 void CSpeedLimiter::AlterSpeed(const ESpeedChange SpeedChange)
@@ -202,25 +230,27 @@ void CSpeedLimiter::AlterSpeed(const ESpeedChange SpeedChange)
     int32_t SpeedFactor = 1;
     if (SpeedChange == DECREASE_SPEED) { SpeedFactor = -1; }
 
-    if (m_Speed >= m_DefaultSpeed)
+    uint32_t Speed = m_Speed.load(std::memory_order_relaxed);
+    if (Speed >= m_DefaultSpeed)
     {
-        m_Speed += 10 * SpeedFactor;
+        Speed += 10 * SpeedFactor;
     }
-    else if (m_Speed >= 15)
+    else if (Speed >= 15)
     {
-        m_Speed += 5 * SpeedFactor;
+        Speed += 5 * SpeedFactor;
     }
-    else if ((m_Speed > 1 && SpeedChange == DECREASE_SPEED) || SpeedChange == INCREASE_SPEED)
+    else if ((Speed > 1 && SpeedChange == DECREASE_SPEED) || SpeedChange == INCREASE_SPEED)
     {
-        m_Speed += 1 * SpeedFactor;
+        Speed += 1 * SpeedFactor;
     }
 
 #ifdef RETROACHIEVEMENTS
-    if (m_Speed < m_DefaultSpeed && RA_HardcoreModeIsActive())
-        m_Speed = m_DefaultSpeed;
+    if (Speed < m_DefaultSpeed && RA_HardcoreModeIsActive())
+        Speed = m_DefaultSpeed;
 #endif
 
-    SpeedChanged(m_Speed);
+    m_Speed.store(Speed, std::memory_order_relaxed);
+    SpeedChanged(Speed);
     FixSpeedRatio();
 }
 
@@ -236,14 +266,19 @@ void CSpeedLimiter::SetSpeed(int Speed)
         Speed = m_DefaultSpeed;
 #endif
 
-    m_Speed = Speed;
-    SpeedChanged(m_Speed);
+    m_Speed.store(Speed, std::memory_order_relaxed);
+    SpeedChanged(Speed);
     FixSpeedRatio();
+}
+
+void CSpeedLimiter::SetNtscRate(bool Ntsc)
+{
+    m_NtscRate.store(Ntsc, std::memory_order_relaxed);
 }
 
 int CSpeedLimiter::GetSpeed(void) const
 {
-    return m_Speed;
+    return m_Speed.load(std::memory_order_relaxed);
 }
 
 int CSpeedLimiter::GetBaseSpeed(void) const
@@ -253,10 +288,11 @@ int CSpeedLimiter::GetBaseSpeed(void) const
 
 void CSpeedLimiter::AdjustTime(HighResTimeStamp diff)
 {
-    m_LastTime += diff;
+    m_Anchor += (int64_t)diff.Raw();
 }
 
 void CSpeedLimiter::Reset()
 {
-    m_Frames = -2;
+    m_ReanchorPending.store(true, std::memory_order_relaxed);
+    m_FpsWindowStart = 0;
 }
