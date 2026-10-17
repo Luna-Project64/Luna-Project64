@@ -5,6 +5,7 @@
 #include <Project64-core/Settings/SettingType/SettingsType-Application.h>
 #include <Project64-core/N64System/Enhancement/Enhancements.h>
 #include <Project64-core/N64System/N64Disk.h>
+#include <Project64-core/N64System/SaveStateInfo.h>
 #include <Project64-core/VersionLuna.h>
 #include "DiscordRPC.h"
 #include <Common/WinEscape.h>
@@ -1202,6 +1203,11 @@ LRESULT CALLBACK CMainGui::MainGui_Proc(HWND hWnd, DWORD uMsg, DWORD wParam, DWO
         WriteTrace(TraceUserInterface, TraceDebug, "WM_DESTROY - Done");
         break;
     default:
+        if (uMsg == CSaveStateInfo::CaptureMessage())
+        {
+            CSaveStateInfo::WriteThumbnail((uint32_t)wParam);
+            return 0;
+        }
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
     return TRUE;

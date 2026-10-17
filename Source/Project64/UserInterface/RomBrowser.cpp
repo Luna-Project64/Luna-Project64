@@ -2,6 +2,7 @@
 #include <Common/WinEscape.h>
 #include <Project64/Settings/UISettings.h>
 #include "DarkModeUtils.h"
+#include "PlayTime.h"
 
 #include <commctrl.h>
 #include <shlobj.h>
@@ -62,6 +63,28 @@ void CRomBrowser::GetFieldInfo(ROMBROWSER_FIELDS_LIST & Fields, bool UseDefault 
     AddField(Fields, "Players", -1, RB_Players, 100, RB_PLAYERS, UseDefault);
     AddField(Fields, "Force Feedback", -1, RB_ForceFeedback, 100, RB_FORCE_FEEDBACK, UseDefault);
     AddField(Fields, "File Format", -1, RB_FileFormat, 100, RB_FILE_FORMAT, UseDefault);
+
+    // Until the user places them themselves, newer columns go after the last visible column
+    AddField(Fields, "Play Time", (int32_t)NextFreeColumn(Fields), RB_PlayTime, 100, RB_PLAYTIME, UseDefault);
+    AddField(Fields, "Stars", (int32_t)NextFreeColumn(Fields), RB_Stars, 70, RB_STARS, UseDefault);
+}
+
+size_t CRomBrowser::NextFreeColumn(const ROMBROWSER_FIELDS_LIST & Fields)
+{
+    size_t NextPos = 0;
+    for (bool Found = true; Found; )
+    {
+        Found = false;
+        for (size_t i = 0; i < Fields.size() && !Found; i++)
+        {
+            Found = Fields[i].Pos() == NextPos;
+        }
+        if (Found)
+        {
+            NextPos++;
+        }
+    }
+    return NextPos;
 }
 
 int32_t CRomBrowser::CalcSortPosition(uint32_t lParam)
@@ -378,7 +401,149 @@ void CRomBrowser::DeallocateBrushs(void)
 
 void CRomBrowser::RomListLoaded(void)
 {
+    m_StarCount.clear();
     RomList_SortList();
+}
+
+static int CountSm64Stars(const uint8_t * Eeprom, size_t Size, bool CannonStars)
+{
+    // SM64 save layout: 4 files, each stored twice as 0x38 byte blocks ending in a
+    // "DA" signature and a 16 bit sum of the preceding bytes
+    const size_t BlockSize = 0x38;
+    if (Size < 8 * BlockSize)
+    {
+        return -1;
+    }
+    int Best = -1;
+    for (size_t File = 0; File < 4; File++)
+    {
+        for (size_t Copy = 0; Copy < 2; Copy++)
+        {
+            const uint8_t * Block = Eeprom + (File * 2 + Copy) * BlockSize;
+            uint16_t Sum = 0;
+            for (size_t i = 0; i < BlockSize - 2; i++)
+            {
+                Sum = (uint16_t)(Sum + Block[i]);
+            }
+            if (Block[0x34] != 'D' || Block[0x35] != 'A' || Sum != ((Block[0x36] << 8) | Block[0x37]))
+            {
+                continue;
+            }
+            int Stars = 0;
+            // Flags bits 24..30, plus bit 31 as an 8th castle star in 8-star hacks
+            uint8_t CastleStars = Block[0x08] & (CannonStars ? 0xFF : 0x7F);
+            for (int Bit = 0; Bit < 8; Bit++) { Stars += (CastleStars >> Bit) & 1; }
+            for (size_t Course = 0; Course < 25; Course++)
+            {
+                // Bit 7 is the cannon, unless the hack turned it into an 8th star
+                uint8_t CourseStars = Block[0x0C + Course] & (CannonStars ? 0xFF : 0x7F);
+                for (int Bit = 0; Bit < 8; Bit++) { Stars += (CourseStars >> Bit) & 1; }
+            }
+            Best = Stars > Best ? Stars : Best;
+            break; // main copy is valid, the backup holds the same data
+        }
+    }
+    return Best;
+}
+
+static int RomCannonStars(const char * RomFile)
+{
+    // The common "8 stars per course" patch changes save_file_get_course_star_count's
+    // loop from 7 to 8 bits (slti at, t3, 7 at ROM 0x34FDC in the US engine)
+    HANDLE hFile = CreateFileA(RomFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return -1;
+    }
+    uint8_t Header[4], Code[4];
+    DWORD Read = 0;
+    bool Ok = ReadFile(hFile, Header, sizeof(Header), &Read, nullptr) && Read == sizeof(Header) &&
+        SetFilePointer(hFile, 0x34FDC, nullptr, FILE_BEGIN) == 0x34FDC &&
+        ReadFile(hFile, Code, sizeof(Code), &Read, nullptr) && Read == sizeof(Code);
+    CloseHandle(hFile);
+    if (!Ok)
+    {
+        return -1;
+    }
+
+    uint32_t Word;
+    if (Header[0] == 0x80 && Header[1] == 0x37) // .z64, big endian
+    {
+        Word = (Code[0] << 24) | (Code[1] << 16) | (Code[2] << 8) | Code[3];
+    }
+    else if (Header[0] == 0x37 && Header[1] == 0x80) // .v64, byte swapped
+    {
+        Word = (Code[1] << 24) | (Code[0] << 16) | (Code[3] << 8) | Code[2];
+    }
+    else if (Header[0] == 0x40 && Header[1] == 0x12) // .n64, little endian
+    {
+        Word = (Code[3] << 24) | (Code[2] << 16) | (Code[1] << 8) | Code[0];
+    }
+    else
+    {
+        return -1; // zipped or not a ROM we can peek into
+    }
+    return Word == 0x29610008 ? 1 : (Word == 0x29610007 ? 0 : -1);
+}
+
+int CRomBrowser::StarsCollected(const ROM_INFO * pRomInfo)
+{
+    std::map<std::string, int>::const_iterator Cached = m_StarCount.find(pRomInfo->szFullFileName);
+    if (Cached != m_StarCount.end())
+    {
+        return Cached->second;
+    }
+
+    // The emulator names EEPROM saves after the ROM's internal name, or the file name when that is empty
+    char SaveName[260];
+    strncpy(SaveName, pRomInfo->InternalName, sizeof(SaveName) - 1);
+    SaveName[sizeof(SaveName) - 1] = '\0';
+    if (SaveName[0] == '\0')
+    {
+        strncpy(SaveName, CPath(pRomInfo->szFullFileName).GetName().c_str(), sizeof(SaveName) - 1);
+        CN64Rom::CleanRomName(SaveName, false);
+    }
+
+    CPath SaveDirPath(g_Settings->LoadStringVal(Directory_NativeSave).c_str(), "");
+    SaveDirPath.NormalizePath(CPath(CPath::MODULE_DIRECTORY));
+    std::string SaveDir = (const std::string &)SaveDirPath;
+    CPath SaveFile(SaveDir.c_str(), stdstr_f("%s.eep", SaveName).c_str());
+    if (g_Settings->LoadBool(Setting_UniqueSaveDir))
+    {
+        // "<name>-<md5>", the MD5 isn't known here so take the first match
+        WIN32_FIND_DATAA FindData;
+        HANDLE hFind = FindFirstFileA(CPath(SaveDir.c_str(), stdstr_f("%s-*", SaveName).c_str()), &FindData);
+        if (hFind != INVALID_HANDLE_VALUE)
+        {
+            SaveFile.AppendDirectory(FindData.cFileName);
+            FindClose(hFind);
+        }
+    }
+
+    int Stars = -1;
+    // The running emulator keeps the save open, so share it
+    HANDLE hFile = CreateFileA(SaveFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        uint8_t Eeprom[0x800];
+        DWORD Read = 0;
+        if (ReadFile(hFile, Eeprom, sizeof(Eeprom), &Read, nullptr))
+        {
+            // Some hacks count each course's cannon bit as an 8th star. Check the ROM's star
+            // counting code first, else use what was learned while the hack ran (see CSm64Probe)
+            int CannonStars = RomCannonStars(pRomInfo->szFullFileName);
+            if (CannonStars < 0)
+            {
+                CPlayTime::GameStats Stats = { "", 0, 0, 0, 0, 0, -1 };
+                CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country), Stats);
+                CannonStars = Stats.CannonStars;
+            }
+            Stars = CountSm64Stars(Eeprom, Read, CannonStars == 1);
+        }
+        CloseHandle(hFile);
+    }
+    m_StarCount[pRomInfo->szFullFileName] = Stars;
+    return Stars;
 }
 
 void CRomBrowser::RomDirChanged(void)
@@ -549,7 +714,7 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
     if (idCtrl != IDC_ROMLIST) { return false; }
     LPDRAWITEMSTRUCT ditem = (LPDRAWITEMSTRUCT)lParam;
 
-    RECT rcItem, rcDraw;
+    RECT rcItem;
     wchar_t String[300];
     LVITEM lvItem;
     HBRUSH hBrush;
@@ -636,8 +801,6 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
     lvItem.pszText = String;
     SendMessage(m_hRomList, LVM_GETITEMTEXT, (WPARAM)ditem->itemID, (LPARAM)&lvItem);
 
-    memcpy(&rcDraw, &rcItem, sizeof(RECT));
-    rcDraw.right -= 3;
     std::wstring text = String;
     if (wcscmp(L"#340#", text.c_str()) == 0)
     {
@@ -648,7 +811,7 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
         text = stdstr(pRomInfo->FileName).ToUTF16();
     }
 
-    DrawText(ditem->hDC, text.c_str(), text.length(), &rcDraw, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_WORD_ELLIPSIS);
+    DrawRomListCell(ditem->hDC, rcItem, 0, pRomInfo, text);
 
     memset(&lvc, 0, sizeof(lvc));
     lvc.mask = LVCF_FMT | LVCF_WIDTH;
@@ -661,8 +824,6 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
         lvItem.cchTextMax = sizeof(String) / sizeof(String[0]);
         lvItem.pszText = String;
         SendMessage(m_hRomList, LVM_GETITEMTEXT, ditem->itemID, (LPARAM)&lvItem);
-        memcpy(&rcDraw, &rcItem, sizeof(RECT));
-        rcDraw.right -= 3;
         text = String;
         if (wcscmp(L"#340#", text.c_str()) == 0)
         {
@@ -673,9 +834,38 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
             text = stdstr(pRomInfo->FileName).ToUTF16();
         }
 
-        DrawText(ditem->hDC, text.c_str(), text.length(), &rcDraw, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_WORD_ELLIPSIS);
+        DrawRomListCell(ditem->hDC, rcItem, nColumn, pRomInfo, text);
     }
     return true;
+}
+
+void CRomBrowser::DrawRomListCell(HDC hDC, const RECT & rcCell, int32_t Column, const ROM_INFO * pRomInfo, const std::wstring & Text)
+{
+    // The Stars cell of a game marked as 100% complete gets a green background
+    COLORREF OldTextColor = CLR_INVALID;
+    if (Column >= 0 && (size_t)Column < m_FieldType.size() && m_FieldType[Column] == RB_Stars &&
+        CPlayTime::Get().IsCompleted(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country)) &&
+        StarsCollected(pRomInfo) >= 0)
+    {
+        bool DarkTheme = g_Settings->LoadBool((SettingID)Setting_DarkTheme);
+        COLORREF Fill = DarkTheme ? RGB(38, 96, 54) : RGB(198, 239, 206);
+        HBRUSH_MAP::iterator itr = m_Brushes.find(Fill);
+        if (itr == m_Brushes.end())
+        {
+            itr = m_Brushes.insert(HBRUSH_MAP::value_type(Fill, CreateSolidBrush(Fill))).first;
+        }
+        FillRect(hDC, &rcCell, itr->second);
+        OldTextColor = SetTextColor(hDC, DarkTheme ? RGB(220, 255, 228) : RGB(0, 97, 0));
+    }
+
+    RECT rcDraw = rcCell;
+    rcDraw.right -= 3;
+    DrawText(hDC, Text.c_str(), Text.length(), &rcDraw, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_WORD_ELLIPSIS);
+
+    if (OldTextColor != CLR_INVALID)
+    {
+        SetTextColor(hDC, OldTextColor);
+    }
 }
 
 bool CRomBrowser::RomListNotify(int32_t idCtrl, uint32_t pnmh)
@@ -787,6 +977,15 @@ int32_t CALLBACK CRomBrowser::RomList_CompareItems(uint32_t lParam1, uint32_t lP
     case RB_ForceFeedback: result = (int32_t)lstrcmpiA(pRomInfo1->ForceFeedback, pRomInfo2->ForceFeedback); break;
     case RB_Genre: result = (int32_t)lstrcmpiA(pRomInfo1->Genre, pRomInfo2->Genre); break;
     case RB_FileFormat: result = (int32_t)pRomInfo1->FileFormat - (int32_t)pRomInfo2->FileFormat; break;
+    case RB_PlayTime:
+    {
+        CPlayTime::GameStats Stats1 = { "", 0 }, Stats2 = { "", 0 };
+        CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo1->CRC1, pRomInfo1->CRC2, pRomInfo1->Country), Stats1);
+        CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo2->CRC1, pRomInfo2->CRC2, pRomInfo2->Country), Stats2);
+        result = Stats1.Seconds < Stats2.Seconds ? -1 : (Stats1.Seconds > Stats2.Seconds ? 1 : 0);
+        break;
+    }
+    case RB_Stars: result = _this->StarsCollected(pRomInfo1) - _this->StarsCollected(pRomInfo2); break;
     default: result = 0; break;
     }
     return result;
@@ -887,6 +1086,33 @@ void CRomBrowser::RomList_GetDispInfo(uint32_t pnmh)
         default: swprintf(lpdi->item.pszText, lpdi->item.cchTextMax / sizeof(wchar_t), L"Unknown (%X)", pRomInfo->FileFormat); break;
         }
         break;
+    case RB_PlayTime:
+    {
+        CPlayTime::GameStats Stats;
+        if (CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country), Stats) && Stats.Seconds > 0)
+        {
+            wcsncpy(lpdi->item.pszText, CPlayTime::FormatDuration(Stats.Seconds).c_str(), lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        else
+        {
+            wcsncpy(lpdi->item.pszText, L" ", lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        break;
+    }
+    case RB_Stars:
+    {
+        // Only games with a Super Mario 64 style save file get a count
+        int Stars = StarsCollected(pRomInfo);
+        if (Stars >= 0)
+        {
+            swprintf(lpdi->item.pszText, lpdi->item.cchTextMax / sizeof(wchar_t), L"%d \x2605", Stars);
+        }
+        else
+        {
+            wcsncpy(lpdi->item.pszText, L" ", lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        break;
+    }
     default: wcsncpy(lpdi->item.pszText, L" ", lpdi->item.cchTextMax);
     }
     if (lpdi->item.pszText == nullptr || wcslen(lpdi->item.pszText) == 0) { lpdi->item.pszText = L" "; }
@@ -932,6 +1158,8 @@ void CRomBrowser::RomList_PopupMenu(uint32_t /*pnmh*/)
 {
     LONG iItem = ListView_GetNextItem(m_hRomList, -1, LVNI_SELECTED);
     m_SelectedRom = "";
+    m_SelectedRomKey = "";
+    bool HasStars = false;
     if (iItem != -1)
     {
         LV_ITEM lvItem;
@@ -947,6 +1175,8 @@ void CRomBrowser::RomList_PopupMenu(uint32_t /*pnmh*/)
 
         if (!pRomInfo) { return; }
         m_SelectedRom = pRomInfo->szFullFileName;
+        m_SelectedRomKey = CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country);
+        HasStars = StarsCollected(pRomInfo) >= 0;
     }
 
     // Load the menu
@@ -1001,6 +1231,14 @@ void CRomBrowser::RomList_PopupMenu(uint32_t /*pnmh*/)
                 lpmii.fState = 0;
                 SetMenuItemInfo(hPopupMenu, (uint32_t)GfxMenu, MF_BYCOMMAND, &lpmii);
             }
+        }
+
+        // Games with a star count can be marked as 100% complete, which turns their Stars cell green
+        if (HasStars)
+        {
+            bool Completed = CPlayTime::Get().IsCompleted(m_SelectedRomKey);
+            AppendMenu(hPopupMenu, MF_SEPARATOR, 0, nullptr);
+            AppendMenu(hPopupMenu, MF_STRING | (Completed ? MF_CHECKED : MF_UNCHECKED), ID_POPUPMENU_COMPLETED, L"100% Complete");
         }
     }
 
@@ -1136,6 +1374,7 @@ void CRomBrowser::ShowRomList(void)
 {
     if (m_Visible || g_Settings->LoadBool(GameRunning_CPU_Running)) { return; }
     m_ShowingRomBrowser = true;
+    m_StarCount.clear(); // a game may have just saved new stars
     WatchThreadStop();
     if (m_hRomList == nullptr) { CreateRomListControl(); }
     EnableWindow(m_hRomList, TRUE);
@@ -1208,6 +1447,16 @@ void CRomBrowser::HideRomList(void)
 
 bool CRomBrowser::RomBrowserCommand(uint32_t wParam)
 {
+    if (LOWORD(wParam) == ID_POPUPMENU_COMPLETED)
+    {
+        if (!m_SelectedRomKey.empty())
+        {
+            CPlayTime::Get().SetCompleted(m_SelectedRomKey, !CPlayTime::Get().IsCompleted(m_SelectedRomKey));
+            InvalidateRect(m_hRomList, nullptr, FALSE);
+        }
+        return true;
+    }
+
     if (LOWORD(wParam) != IDC_ROMBROWSER_PROFILE_PRESET_COMBO || HIWORD(wParam) != CBN_SELCHANGE)
     {
         return false;

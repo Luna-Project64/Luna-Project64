@@ -218,6 +218,11 @@
     <ClCompile Include="UserInterface\MenuShortCuts.cpp" />
     <ClCompile Include="UserInterface\Notification.cpp" />
     <ClCompile Include="UserInterface\ProfilesConfigUI.cpp" />
+    <ClCompile Include="UserInterface\PlayCalendarUI.cpp" />
+    <ClCompile Include="UserInterface\PlayStatsUI.cpp" />
+    <ClCompile Include="UserInterface\PlayTime.cpp" />
+    <ClCompile Include="UserInterface\SaveStateManagerUI.cpp" />
+    <ClCompile Include="UserInterface\StarTimesUI.cpp" />
     <ClCompile Include="UserInterface\ProjectSupport.cpp" />
     <ClCompile Include="UserInterface\RomBrowser.cpp" />
     <ClCompile Include="UserInterface\RomInformation.cpp" />
