@@ -326,6 +326,7 @@ void CLanguage::LoadDefaultStrings(void)
     DEF_STR(RB_FORCE_FEEDBACK, "Force Feedback");
     DEF_STR(RB_FILE_FORMAT, "File Format");
     DEF_STR(RB_NAME, "Name");
+    DEF_STR(RB_PLAYTIME, "Play Time");
 
     // Select ROM
     DEF_STR(SELECT_ROM_DIR, "Select current ROM directory");

@@ -377,6 +377,7 @@ enum LanguageStringID
     RB_FORCE_FEEDBACK = 318,
     RB_FILE_FORMAT = 319,
     RB_NAME = 321,
+    RB_PLAYTIME = 322,
 
     // Select ROM
     SELECT_ROM_DIR = 320,

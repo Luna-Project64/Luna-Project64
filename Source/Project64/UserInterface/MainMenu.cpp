@@ -8,6 +8,9 @@
 #include <Project64\UserInterface\About.h>
 #include "SdcardFsUI.h"
 #include "ProfilesConfigUI.h"
+#include "PlayStatsUI.h"
+#include "SaveStateManagerUI.h"
+#include <Project64-core/N64System/SaveStateInfo.h>
 #include <comutil.h>
 #include <windows.h>
 #include <Common/WinEscape.h>
@@ -334,6 +337,12 @@ bool CMainMenu::ProcessMessage(HWND hWnd, DWORD /*FromAccelerator*/, DWORD MenuI
     case ID_FILE_PROFILES: CProfilesConfigUI(m_ProfileManager).Display(hWnd); m_Gui->RefreshProfilePresetIndex(); break;
     case ID_HELP_SUPPORT_LUNA: WinEscape::Utf8::OpenNativeFor("https://github.com/Luna-Project64/Luna-Project64/issues"); break;
     case ID_FILE_ROM_INFO: OnRomInfo(hWnd); break;
+    case ID_FILE_PLAY_STATS: CPlayStatsDlg().DoModal(hWnd); break;
+    case ID_SYSTEM_SAVESTATE_MANAGER:
+        CSaveStateManagerDlg().DoModal(hWnd);
+        // Labels may have changed
+        ResetMenu();
+        break;
     case ID_FILE_STARTEMULATION:
         m_Gui->SaveWindowLoc();
         // Now we have created again, we can start up emulation
@@ -946,6 +955,12 @@ std::wstring CMainMenu::GetSaveSlotString(int Slot)
 
     if (!g_Settings->LoadBool(GameRunning_CPU_Running)) { return SlotName.ToUTF16(); }
 
+    std::string Label = CSaveStateInfo::GetLabel(Slot);
+    if (!Label.empty())
+    {
+        SlotName += " - " + Label;
+    }
+
     stdstr LastSaveTime;
 
     // Check first save name
@@ -1086,6 +1101,7 @@ void CMainMenu::FillOutMenu(HMENU hMenu)
         Item.Reset(ID_FILE_ROM_INFO, MENU_ROM_INFO, m_ShortCuts.ShortCutString(ID_FILE_ROM_INFO, RunningState));
         Item.SetItemEnabled(RomLoaded);
         FileMenu.push_back(Item);
+        FileMenu.push_back(MENU_ITEM(ID_FILE_PLAY_STATS, EMPTY_STRING, EMPTY_STDSTR, nullptr, L"Play Stats..."));
         FileMenu.push_back(MENU_ITEM(SPLITER));
         Item.Reset(ID_FILE_STARTEMULATION, MENU_START, m_ShortCuts.ShortCutString(ID_FILE_STARTEMULATION, RunningState));
         Item.SetItemEnabled(RomLoaded && !CPURunning);
@@ -1489,6 +1505,7 @@ void CMainMenu::FillOutMenu(HMENU hMenu)
     }
     SystemMenu.push_back(MENU_ITEM(SPLITER));
     SystemMenu.push_back(MENU_ITEM(SUB_MENU, MENU_CURRENT_SAVE, EMPTY_STDSTR, &CurrentSaveMenu));
+    SystemMenu.push_back(MENU_ITEM(ID_SYSTEM_SAVESTATE_MANAGER, EMPTY_STRING, EMPTY_STDSTR, nullptr, L"Savestate Manager..."));
     SystemMenu.push_back(MENU_ITEM(SPLITER));
     if (Enhancement)
     {
