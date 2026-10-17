@@ -135,6 +135,13 @@ private:
 
     void StateSaverThread();
 
+    // Savestates already read or written this session, kept in memory so a
+    // reload skips the disk and the decompression.
+    std::shared_ptr<MemoryState> FindCachedState(const std::string & ZipFile);
+    void CacheState(const std::string & ZipFile, const std::shared_ptr<MemoryState> & State);
+    void CacheStateLocked(const std::string & ZipFile, const std::shared_ptr<MemoryState> & State, uint64_t WriteTime, uint64_t FileSize);
+    bool StateMatchesRom(const MemoryState & State) const;
+
     CPlugins      * const m_Plugins;  // The plugin container
     CPlugins      * m_SyncPlugins;
     CN64System    * m_SyncCPU;
@@ -192,6 +199,20 @@ private:
     bool m_Active = true;
     std::map<std::string, MemState> m_States;
     std::optional<std::thread> m_SaverThread;
+
+    // Keyed by zip path. Each entry remembers the file's write time and size
+    // when it was cached and is only used while the file still matches.
+    // Guarded by m_StatesMutex.
+    struct CachedState
+    {
+        std::shared_ptr<MemoryState> State;
+        uint64_t WriteTime;
+        uint64_t FileSize;
+        uint64_t LastUsed;
+    };
+    enum { MaxCachedStates = 4 };
+    std::map<std::string, CachedState> m_StateCache;
+    uint64_t m_StateCacheClock = 0;
 
     // invoked when there is any jobs to be written from m_States to disk
     std::condition_variable m_SaverCV;
