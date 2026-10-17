@@ -12,6 +12,7 @@ public:
         NOTIFY_HANDLER_EX(IDC_STATS_LIST, LVN_ITEMCHANGED, OnItemChanged)
         NOTIFY_HANDLER_EX(IDC_STATS_LIST, NM_DBLCLK, OnDoubleClick)
         COMMAND_ID_HANDLER(IDC_STATS_STARS, OnStarTimes)
+        COMMAND_ID_HANDLER(IDC_STATS_CALENDAR, OnCalendar)
         COMMAND_ID_HANDLER(IDOK, OnCloseCmd)
         COMMAND_ID_HANDLER(IDCANCEL, OnCloseCmd)
     END_MSG_MAP()
@@ -38,6 +39,7 @@ private:
     LRESULT OnItemChanged(LPNMHDR pnmh);
     LRESULT OnDoubleClick(LPNMHDR pnmh);
     LRESULT OnStarTimes(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL & bHandled);
+    LRESULT OnCalendar(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL & bHandled);
     LRESULT OnCloseCmd(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL & bHandled);
 
     void SortList(void);

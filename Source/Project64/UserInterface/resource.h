@@ -1017,15 +1017,21 @@
 #define IDC_STARS_SUMMARY               1775
 #define IDC_STARS_LIST                  1776
 #define IDC_STATS_STARS                 1777
+#define IDD_Play_Calendar               233
+#define IDC_CAL_GRID                    1778
+#define IDC_CAL_SUMMARY                 1779
+#define IDC_CAL_DAY_TITLE               1780
+#define IDC_CAL_DAY_LIST                1781
+#define IDC_STATS_CALENDAR              1782
 #define ID_POPUPMENU_COMPLETED          40170
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        233
+#define _APS_NEXT_RESOURCE_VALUE        234
 #define _APS_NEXT_COMMAND_VALUE         40171
-#define _APS_NEXT_CONTROL_VALUE         1778
+#define _APS_NEXT_CONTROL_VALUE         1783
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif

@@ -102,6 +102,19 @@ void CPlayTime::Start(void)
             }
         }
 
+        m_Daily.clear();
+        CIniFile LogIni(IniFileName("PlayLog.ini").c_str(), false, true);
+        std::vector<std::string> Days = LogIni.GetVectorOfSectionsSorted();
+        for (size_t i = 0; i < Days.size(); i++)
+        {
+            CIniFileBase::KeyValueData Data;
+            LogIni.GetKeyValueData(Days[i].c_str(), Data);
+            for (CIniFileBase::KeyValueData::const_iterator itr = Data.begin(); itr != Data.end(); itr++)
+            {
+                m_Daily[Days[i]][itr->first] = strtoul(itr->second.c_str(), nullptr, 10);
+            }
+        }
+
         CIniFile Ini(IniFileName("PlayTime.ini").c_str(), false, true);
         std::vector<std::string> Sections = Ini.GetVectorOfSectionsSorted();
         for (size_t i = 0; i < Sections.size(); i++)
@@ -189,6 +202,23 @@ bool CPlayTime::GetStarNames(const std::string & Key, CSm64Probe::Names & Names)
     }
     Names = itr->second;
     return true;
+}
+
+CPlayTime::DailyStatsMap CPlayTime::GetDailyStats(void)
+{
+    CGuard Guard(m_CS);
+    return m_Daily;
+}
+
+std::string CPlayTime::DayKey(uint32_t Time)
+{
+    time_t t = (time_t)Time;
+    struct tm Local;
+    if (localtime_s(&Local, &t) != 0)
+    {
+        return "";
+    }
+    return stdstr_f("%04d-%02d-%02d", Local.tm_year + 1900, Local.tm_mon + 1, Local.tm_mday);
 }
 
 void CPlayTime::SaveStarNames(const CSm64Probe::Names & Names)
@@ -391,6 +421,12 @@ void CPlayTime::ThreadProc(void)
         itr->second.LastPlayed = TimeNow;
         m_SessionSeconds += Seconds;
         m_UnflushedSeconds += Seconds;
+        std::string Day = DayKey(TimeNow);
+        if (!Day.empty())
+        {
+            m_Daily[Day][m_SessionKey] += Seconds;
+            m_DirtyDays.insert(Day);
+        }
         TrackStars(Seconds);
         if (m_UnflushedSeconds >= FlushIntervalSeconds)
         {
@@ -432,6 +468,22 @@ void CPlayTime::EndSession(void)
 void CPlayTime::Flush(void)
 {
     m_UnflushedSeconds = 0;
+    if (!m_DirtyDays.empty())
+    {
+        CIniFile LogIni(IniFileName("PlayLog.ini").c_str());
+        LogIni.SetAutoFlush(false);
+        for (std::set<std::string>::const_iterator Day = m_DirtyDays.begin(); Day != m_DirtyDays.end(); Day++)
+        {
+            const DayStats & Games = m_Daily[*Day];
+            for (DayStats::const_iterator Game = Games.begin(); Game != Games.end(); Game++)
+            {
+                LogIni.SaveString(Day->c_str(), Game->first.c_str(), stdstr_f("%u", Game->second).c_str());
+            }
+        }
+        LogIni.FlushChanges();
+        m_DirtyDays.clear();
+    }
+
     GameStatsMap::const_iterator itr = m_Stats.find(m_SessionKey);
     if (itr == m_Stats.end())
     {

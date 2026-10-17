@@ -44,6 +44,12 @@ public:
     StarStatsMap GetStarStats(const std::string & Key);
     bool GetStarNames(const std::string & Key, CSm64Probe::Names & Names);
 
+    // Seconds played per day ("YYYY-MM-DD", local time) and game
+    typedef std::map<std::string, uint32_t> DayStats;
+    typedef std::map<std::string, DayStats> DailyStatsMap;
+    DailyStatsMap GetDailyStats(void);
+    static std::string DayKey(uint32_t Time);
+
     static CPlayTime & Get(void);
 
     void Start(void);
@@ -86,6 +92,8 @@ private:
     std::map<std::string, CSm64Probe::Names> m_StarNames;
     std::set<std::string> m_Completed;
     bool m_SessionNamesSaved;
+    DailyStatsMap m_Daily;
+    std::set<std::string> m_DirtyDays;
     HANDLE m_Thread;
     HANDLE m_StopEvent;
 
