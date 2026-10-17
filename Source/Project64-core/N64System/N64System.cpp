@@ -882,7 +882,7 @@ void CN64System::ApplyGSButton(void)
     }
 }
 
-void CN64System::Reset(bool bInitReg, bool ClearMenory)
+void CN64System::Reset(bool bInitReg, bool ClearMenory, bool KeepRecompiledCode)
 {
     WriteTrace(TraceN64System, TraceDebug, "Start (bInitReg: %s, ClearMenory: %s)", bInitReg ? "true" : "false", ClearMenory ? "true" : "false");
     g_Settings->SaveBool(GameRunning_InReset, true);
@@ -923,7 +923,14 @@ void CN64System::Reset(bool bInitReg, bool ClearMenory)
 
     if (m_Recomp)
     {
-        m_Recomp->Reset();
+        if (KeepRecompiledCode)
+        {
+            m_Recomp->ResetLookupTables();
+        }
+        else
+        {
+            m_Recomp->Reset();
+        }
     }
     /*if (m_Plugins && g_Settings->LoadBool(GameRunning_CPU_Running))
     {
@@ -932,7 +939,7 @@ void CN64System::Reset(bool bInitReg, bool ClearMenory)
     }*/
     if (m_SyncCPU && m_SyncCPU->m_MMU_VM.Rdram() != nullptr)
     {
-        m_SyncCPU->Reset(bInitReg, ClearMenory);
+        m_SyncCPU->Reset(bInitReg, ClearMenory, KeepRecompiledCode);
     }
     g_Settings->SaveBool(GameRunning_InReset, true);
     g_SummerCart->Reset();
@@ -2170,7 +2177,9 @@ bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
     old_dacrate = m_Reg.AI_DACRATE_REG;
 
     {
-        Reset(false, true);
+        // Compiled code survives the load and is revalidated block by block,
+        // unless the RDRAM layout itself changes.
+        Reset(false, true, state->RdramSize == g_Settings->LoadDword(Game_RDRamSize));
 
         SaveRDRAMSize = state->RdramSize;
         m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
@@ -2360,7 +2369,7 @@ bool CN64System::LoadState(const char * FileName)
                         return false;
                     }
                 }
-                Reset(false, true);
+                Reset(false, true, SaveRDRAMSize == g_Settings->LoadDword(Game_RDRamSize));
 
                 m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
                 m_MMU_VM.UnProtectMemory(0xA4000000, 0xA4001FFC);
@@ -2455,7 +2464,7 @@ bool CN64System::LoadState(const char * FileName)
                 return false;
             }
         }
-        Reset(false, true);
+        Reset(false, true, SaveRDRAMSize == g_Settings->LoadDword(Game_RDRamSize));
         m_MMU_VM.UnProtectMemory(0x80000000, 0x80000000 + g_Settings->LoadDword(Game_RDRamSize) - 4);
         m_MMU_VM.UnProtectMemory(0xA4000000, 0xA4001FFC);
         g_Settings->SaveDword(Game_RDRamSize, SaveRDRAMSize);

@@ -38,6 +38,7 @@ public:
 
     void Run();
     void Reset();
+    void ResetLookupTables();
     void ResetRecompCode(bool bAllocate);
 
     // Self-modifying code methods
