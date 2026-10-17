@@ -77,7 +77,7 @@ void CFramePerSecond::UpdateDisplay(void)
     std::string DisplayString;
     if (m_iFrameRateType == FR_VIs || m_iFrameRateType == FR_VIs_DLs)
     {
-        DisplayString = stdstr_f(m_ViFrameRateWhole >= 0 ? "VI/s: %d.%d" : "VI/s: -.--", m_ViFrameRateWhole, m_ViFrameRateFraction);
+        DisplayString = stdstr_f(m_ViFrameRateWhole >= 0 ? "VI/s: %d.%02d" : "VI/s: -.--", m_ViFrameRateWhole, m_ViFrameRateFraction);
     }
     if (m_iFrameRateType == FR_PERCENT && m_ViFrameRateWhole > 0)
     {
