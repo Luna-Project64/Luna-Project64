@@ -36,7 +36,7 @@ enum CPU_TYPE
 
 enum FRAMERATE_TYPE
 {
-    FR_VIs = 0, FR_DLs = 1, FR_PERCENT = 2, FR_VIs_DLs = 3,
+    FR_VIs = 0, FR_DLs = 1, FR_PERCENT = 2, FR_VIs_DLs = 3, FR_FPS = 4,
 };
 
 enum SAVE_CHIP_TYPE
