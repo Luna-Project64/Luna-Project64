@@ -65,7 +65,7 @@ public:
     void   SetSpeed(int Speed) { m_Limiter.SetSpeed(Speed); }
     int    GetSpeed(void) const { return m_Limiter.GetSpeed(); }
     int    GetBaseSpeed(void) const { return m_Limiter.GetBaseSpeed(); }
-    void   Reset(bool bInitReg, bool ClearMenory);
+    void   Reset(bool bInitReg, bool ClearMenory, bool KeepRecompiledCode = false);
     void   GameReset();
     void   PluginReset();
     void   ApplyGSButton(void);
