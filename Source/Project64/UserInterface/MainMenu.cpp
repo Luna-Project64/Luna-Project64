@@ -8,6 +8,7 @@
 #include <Project64\UserInterface\About.h>
 #include "SdcardFsUI.h"
 #include "ProfilesConfigUI.h"
+#include "PlayStatsUI.h"
 #include "SaveStateManagerUI.h"
 #include <Project64-core/N64System/SaveStateInfo.h>
 #include <comutil.h>
@@ -336,6 +337,7 @@ bool CMainMenu::ProcessMessage(HWND hWnd, DWORD /*FromAccelerator*/, DWORD MenuI
     case ID_FILE_PROFILES: CProfilesConfigUI(m_ProfileManager).Display(hWnd); m_Gui->RefreshProfilePresetIndex(); break;
     case ID_HELP_SUPPORT_LUNA: WinEscape::Utf8::OpenNativeFor("https://github.com/Luna-Project64/Luna-Project64/issues"); break;
     case ID_FILE_ROM_INFO: OnRomInfo(hWnd); break;
+    case ID_FILE_PLAY_STATS: CPlayStatsDlg().DoModal(hWnd); break;
     case ID_SYSTEM_SAVESTATE_MANAGER:
         CSaveStateManagerDlg().DoModal(hWnd);
         // Labels may have changed
@@ -1099,6 +1101,7 @@ void CMainMenu::FillOutMenu(HMENU hMenu)
         Item.Reset(ID_FILE_ROM_INFO, MENU_ROM_INFO, m_ShortCuts.ShortCutString(ID_FILE_ROM_INFO, RunningState));
         Item.SetItemEnabled(RomLoaded);
         FileMenu.push_back(Item);
+        FileMenu.push_back(MENU_ITEM(ID_FILE_PLAY_STATS, EMPTY_STRING, EMPTY_STDSTR, nullptr, L"Play Stats..."));
         FileMenu.push_back(MENU_ITEM(SPLITER));
         Item.Reset(ID_FILE_STARTEMULATION, MENU_START, m_ShortCuts.ShortCutString(ID_FILE_STARTEMULATION, RunningState));
         Item.SetItemEnabled(RomLoaded && !CPURunning);

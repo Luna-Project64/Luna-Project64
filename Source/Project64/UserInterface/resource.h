@@ -1002,7 +1002,10 @@
 #define ID_SDCARD_CREATE_DIRECTORY      40167
 #define ID_SDCARD_BACK                  40168
 #define ID_SDCARD_DELETE                40169
+#define IDD_Play_Stats                  230
 #define IDD_Save_States                 231
+#define IDC_STATS_SUMMARY               1766
+#define IDC_STATS_LIST                  1767
 #define IDC_SS_LIST                     1768
 #define IDC_SS_PREVIEW                  1769
 #define IDC_SS_NO_PREVIEW               1770

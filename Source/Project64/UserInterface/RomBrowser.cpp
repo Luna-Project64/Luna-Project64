@@ -2,6 +2,7 @@
 #include <Common/WinEscape.h>
 #include <Project64/Settings/UISettings.h>
 #include "DarkModeUtils.h"
+#include "PlayTime.h"
 
 #include <commctrl.h>
 #include <shlobj.h>
@@ -62,6 +63,22 @@ void CRomBrowser::GetFieldInfo(ROMBROWSER_FIELDS_LIST & Fields, bool UseDefault 
     AddField(Fields, "Players", -1, RB_Players, 100, RB_PLAYERS, UseDefault);
     AddField(Fields, "Force Feedback", -1, RB_ForceFeedback, 100, RB_FORCE_FEEDBACK, UseDefault);
     AddField(Fields, "File Format", -1, RB_FileFormat, 100, RB_FILE_FORMAT, UseDefault);
+
+    // Until the user places it themselves, show play time after the last visible column
+    size_t NextPos = 0;
+    for (bool Found = true; Found; )
+    {
+        Found = false;
+        for (size_t i = 0; i < Fields.size() && !Found; i++)
+        {
+            Found = Fields[i].Pos() == NextPos;
+        }
+        if (Found)
+        {
+            NextPos++;
+        }
+    }
+    AddField(Fields, "Play Time", (int32_t)NextPos, RB_PlayTime, 100, RB_PLAYTIME, UseDefault);
 }
 
 int32_t CRomBrowser::CalcSortPosition(uint32_t lParam)
@@ -787,6 +804,14 @@ int32_t CALLBACK CRomBrowser::RomList_CompareItems(uint32_t lParam1, uint32_t lP
     case RB_ForceFeedback: result = (int32_t)lstrcmpiA(pRomInfo1->ForceFeedback, pRomInfo2->ForceFeedback); break;
     case RB_Genre: result = (int32_t)lstrcmpiA(pRomInfo1->Genre, pRomInfo2->Genre); break;
     case RB_FileFormat: result = (int32_t)pRomInfo1->FileFormat - (int32_t)pRomInfo2->FileFormat; break;
+    case RB_PlayTime:
+    {
+        CPlayTime::GameStats Stats1 = { "", 0 }, Stats2 = { "", 0 };
+        CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo1->CRC1, pRomInfo1->CRC2, pRomInfo1->Country), Stats1);
+        CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo2->CRC1, pRomInfo2->CRC2, pRomInfo2->Country), Stats2);
+        result = Stats1.Seconds < Stats2.Seconds ? -1 : (Stats1.Seconds > Stats2.Seconds ? 1 : 0);
+        break;
+    }
     default: result = 0; break;
     }
     return result;
@@ -887,6 +912,19 @@ void CRomBrowser::RomList_GetDispInfo(uint32_t pnmh)
         default: swprintf(lpdi->item.pszText, lpdi->item.cchTextMax / sizeof(wchar_t), L"Unknown (%X)", pRomInfo->FileFormat); break;
         }
         break;
+    case RB_PlayTime:
+    {
+        CPlayTime::GameStats Stats;
+        if (CPlayTime::Get().GetStats(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country), Stats) && Stats.Seconds > 0)
+        {
+            wcsncpy(lpdi->item.pszText, CPlayTime::FormatDuration(Stats.Seconds).c_str(), lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        else
+        {
+            wcsncpy(lpdi->item.pszText, L" ", lpdi->item.cchTextMax / sizeof(wchar_t));
+        }
+        break;
+    }
     default: wcsncpy(lpdi->item.pszText, L" ", lpdi->item.cchTextMax);
     }
     if (lpdi->item.pszText == nullptr || wcslen(lpdi->item.pszText) == 0) { lpdi->item.pszText = L" "; }
