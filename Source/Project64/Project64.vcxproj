@@ -218,6 +218,7 @@
     <ClCompile Include="UserInterface\MenuShortCuts.cpp" />
     <ClCompile Include="UserInterface\Notification.cpp" />
     <ClCompile Include="UserInterface\ProfilesConfigUI.cpp" />
+    <ClCompile Include="UserInterface\SaveStateManagerUI.cpp" />
     <ClCompile Include="UserInterface\ProjectSupport.cpp" />
     <ClCompile Include="UserInterface\RomBrowser.cpp" />
     <ClCompile Include="UserInterface\RomInformation.cpp" />
