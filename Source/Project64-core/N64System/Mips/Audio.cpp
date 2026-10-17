@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include <Project64-core/N64System/Mips/Audio.h>
+#include <Project64-core/N64System/FramePacing.h>
 #include <Project64-core/N64System/SystemGlobals.h>
 #include <Project64-core/N64System/N64System.h>
 
@@ -86,6 +87,7 @@ void CAudio::LenChanged()
     if (g_Plugins->Audio()->AiLenChanged != nullptr)
     {
         WriteTrace(TraceAudio, TraceDebug, "Calling plugin AiLenChanged");
+        CFrameCost Cost(FrameCost_Audio);
         g_Plugins->Audio()->AiLenChanged();
         WriteTrace(TraceAudio, TraceDebug, "Plugin AiLenChanged Done");
     }
