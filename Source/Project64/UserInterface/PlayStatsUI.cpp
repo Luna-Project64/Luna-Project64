@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "PlayStatsUI.h"
+#include "StarTimesUI.h"
 
 CPlayStatsDlg::CPlayStatsDlg(void) :
     m_SortColumn(Column_PlayTime),
@@ -20,6 +21,7 @@ LRESULT CPlayStatsDlg::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*l
             continue;
         }
         m_Games.push_back(Stats);
+        m_Keys.push_back(itr->first);
         if (m_Games.back().Name.empty())
         {
             m_Games.back().Name = itr->first;
@@ -81,7 +83,51 @@ LRESULT CPlayStatsDlg::OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*l
         m_List.SetItemText(Item, Column_LastPlayed, CPlayTime::FormatDate(Stats.LastPlayed).c_str());
     }
     SortList();
+    if (!m_Games.empty())
+    {
+        m_List.SetItemState(0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+    }
+    UpdateStarButton();
     return TRUE;
+}
+
+int CPlayStatsDlg::SelectedGame(void)
+{
+    int Item = m_List.GetNextItem(-1, LVNI_SELECTED);
+    return Item >= 0 ? (int)m_List.GetItemData(Item) : -1;
+}
+
+void CPlayStatsDlg::UpdateStarButton(void)
+{
+    int Game = SelectedGame();
+    GetDlgItem(IDC_STATS_STARS).EnableWindow(Game >= 0 && !CPlayTime::Get().GetStarStats(m_Keys[Game]).empty());
+}
+
+void CPlayStatsDlg::ShowStarTimes(void)
+{
+    int Game = SelectedGame();
+    if (Game >= 0 && !CPlayTime::Get().GetStarStats(m_Keys[Game]).empty())
+    {
+        CStarTimesDlg(m_Keys[Game], m_Games[Game].Name).DoModal(m_hWnd);
+    }
+}
+
+LRESULT CPlayStatsDlg::OnItemChanged(LPNMHDR /*pnmh*/)
+{
+    UpdateStarButton();
+    return 0;
+}
+
+LRESULT CPlayStatsDlg::OnDoubleClick(LPNMHDR /*pnmh*/)
+{
+    ShowStarTimes();
+    return 0;
+}
+
+LRESULT CPlayStatsDlg::OnStarTimes(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL & /*bHandled*/)
+{
+    ShowStarTimes();
+    return 0;
 }
 
 LRESULT CPlayStatsDlg::OnColumnClick(LPNMHDR pnmh)

@@ -14,6 +14,7 @@
 #include <Project64-core/N64System/N64Rom.h>
 #include <Project64-core/N64System/SummerCart.h>
 #include <Project64-core/N64System/SaveStateInfo.h>
+#include <Project64-core/N64System/Sm64Probe.h>
 #include <Project64-core/ExceptionHandler.h>
 #include <Project64-core/Logging.h>
 #include <Project64-core/Debugger.h>
@@ -1280,6 +1281,7 @@ void CN64System::ExecuteCPU()
 
     m_EndEmulation = false;
 
+    CSm64Probe::RomOpened(g_Rom != nullptr ? g_Rom->GetRomAddress() : nullptr, g_Rom != nullptr ? g_Rom->GetRomSize() : 0);
     m_Plugins->RomOpened();
     if (m_SyncCPU)
     {
@@ -2169,6 +2171,7 @@ bool CN64System::LoadState()
 bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
 {
     HighResTimeStamp Start = m_Limiter.Now();
+    CSm64Probe::StateLoading();
 
     uint32_t SaveRDRAMSize, NextVITimer = 0, old_status, old_width, old_dacrate;
     bool AudioResetOnLoad;
@@ -2299,6 +2302,7 @@ bool CN64System::LoadState(CPath& path, std::shared_ptr<MemoryState> state)
 bool CN64System::LoadState(const char * FileName)
 {
     WriteTrace(TraceN64System, TraceDebug, "(%s): Start", FileName);
+    CSm64Probe::StateLoading();
 
     HighResTimeStamp Start = m_Limiter.Now();
 
@@ -2755,6 +2759,11 @@ void CN64System::RefreshScreen()
     if (bFixedAudio())
     {
         g_Audio->SetViIntr(VI_INTR_TIME);
+    }
+
+    if (this == g_BaseSystem)
+    {
+        CSm64Probe::OnViRefresh(m_MMU_VM.Rdram(), m_MMU_VM.RdramSize());
     }
 
     if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateScreen); }

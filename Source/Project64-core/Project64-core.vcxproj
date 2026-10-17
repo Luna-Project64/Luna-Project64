@@ -213,6 +213,7 @@
     <ClCompile Include="N64System\Recompiler\x86\x86RegInfo.cpp" />
     <ClCompile Include="N64System\SpeedLimiter.cpp" />
     <ClCompile Include="N64System\SaveStateInfo.cpp" />
+    <ClCompile Include="N64System\Sm64Probe.cpp" />
     <ClCompile Include="N64System\SummerCart.cpp" />
     <ClCompile Include="N64System\SystemGlobals.cpp" />
     <ClCompile Include="Plugins\AudioPlugin.cpp" />
@@ -328,6 +329,7 @@
     <ClInclude Include="N64System\Recompiler\x86\x86RegInfo.h" />
     <ClInclude Include="N64System\SpeedLimiter.h" />
     <ClInclude Include="N64System\SaveStateInfo.h" />
+    <ClInclude Include="N64System\Sm64Probe.h" />
     <ClInclude Include="N64System\SummerCart.h" />
     <ClInclude Include="N64System\SystemGlobals.h" />
     <ClInclude Include="Notification.h" />

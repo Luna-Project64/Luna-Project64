@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "PlayTime.h"
 #include <Common/IniFile.h>
+#include <Project64-core/N64System/Sm64Probe.h>
 #include <time.h>
 
 CPlayTime & CPlayTime::Get(void)
@@ -18,10 +19,16 @@ CPlayTime::CPlayTime(void) :
 {
 }
 
-std::string CPlayTime::IniFileName(void)
+std::string CPlayTime::IniFileName(const char * FileName)
 {
-    CPath IniFile(CPath(g_Settings->LoadStringVal(SupportFile_Settings).c_str()).GetDriveDirectory().c_str(), "PlayTime.ini");
+    CPath IniFile(CPath(g_Settings->LoadStringVal(SupportFile_Settings).c_str()).GetDriveDirectory().c_str(), FileName);
     return (const std::string &)IniFile;
+}
+
+static std::string StarIniKey(int Key)
+{
+    int Course = Key / 8, Star = Key % 8;
+    return Star == CPlayTime::StarAnyAct ? stdstr_f("C%02d Any", Course) : stdstr_f("C%02d S%d", Course, Star + 1);
 }
 
 static uint32_t IniGetUInt(CIniFile & Ini, const char * Section, const char * Key)
@@ -39,7 +46,34 @@ void CPlayTime::Start(void)
     {
         CGuard Guard(m_CS);
         m_Stats.clear();
-        CIniFile Ini(IniFileName().c_str(), false, true);
+        m_StarStats.clear();
+        CIniFile StarIni(IniFileName("StarTime.ini").c_str(), false, true);
+        std::vector<std::string> StarSections = StarIni.GetVectorOfSectionsSorted();
+        for (size_t i = 0; i < StarSections.size(); i++)
+        {
+            CIniFileBase::KeyValueData Data;
+            StarIni.GetKeyValueData(StarSections[i].c_str(), Data);
+            StarStatsMap & Stars = m_StarStats[StarSections[i]];
+            for (CIniFileBase::KeyValueData::const_iterator itr = Data.begin(); itr != Data.end(); itr++)
+            {
+                int Course = 0, Star = 0;
+                StarStats Stats = { 0, 0, 0 };
+                if (sscanf(itr->second.c_str(), "%u,%u,%u", &Stats.Seconds, &Stats.Grabs, &Stats.FirstGrabAfter) != 3)
+                {
+                    continue;
+                }
+                if (sscanf(itr->first.c_str(), "C%d S%d", &Course, &Star) == 2 && Star >= 1 && Star <= 7)
+                {
+                    Stars[StarKey(Course, Star - 1)] = Stats;
+                }
+                else if (sscanf(itr->first.c_str(), "C%d Any", &Course) == 1)
+                {
+                    Stars[StarKey(Course, StarAnyAct)] = Stats;
+                }
+            }
+        }
+
+        CIniFile Ini(IniFileName("PlayTime.ini").c_str(), false, true);
         std::vector<std::string> Sections = Ini.GetVectorOfSectionsSorted();
         for (size_t i = 0; i < Sections.size(); i++)
         {
@@ -91,6 +125,55 @@ CPlayTime::GameStatsMap CPlayTime::GetAllStats(void)
 {
     CGuard Guard(m_CS);
     return m_Stats;
+}
+
+CPlayTime::StarStatsMap CPlayTime::GetStarStats(const std::string & Key)
+{
+    CGuard Guard(m_CS);
+    std::map<std::string, StarStatsMap>::const_iterator itr = m_StarStats.find(Key);
+    return itr != m_StarStats.end() ? itr->second : StarStatsMap();
+}
+
+void CPlayTime::TrackStars(uint32_t Seconds)
+{
+    // Called with m_CS held, after Seconds were added to the current session
+    if (!CSm64Probe::Supported())
+    {
+        return;
+    }
+    StarStatsMap & Stars = m_StarStats[m_SessionKey];
+
+    // Time goes to the act picked on the star select screen
+    int TimeKey = -1;
+    CSm64Probe::Snapshot Snapshot = CSm64Probe::GetSnapshot();
+    if (Snapshot.Valid && GetTickCount64() - Snapshot.TimeMs < 2000)
+    {
+        bool MainCourse = Snapshot.Course >= 1 && Snapshot.Course <= 15;
+        bool ValidAct = Snapshot.Act >= 1 && Snapshot.Act <= 6;
+        // Entering a main course briefly reports no act, that moment isn't worth its own row
+        if (!MainCourse || ValidAct)
+        {
+            TimeKey = StarKey(Snapshot.Course, MainCourse ? Snapshot.Act - 1 : StarAnyAct);
+            StarStats & Stats = Stars[TimeKey];
+            Stats.Seconds += Seconds;
+        }
+    }
+
+    std::vector<CSm64Probe::StarGrab> Grabs = CSm64Probe::TakeStarGrabs();
+    for (size_t i = 0; i < Grabs.size(); i++)
+    {
+        const CSm64Probe::StarGrab & Grab = Grabs[i];
+        StarStats & Stats = Stars[StarKey(Grab.Course, Grab.Star)];
+        if (Stats.Grabs == 0)
+        {
+            // For stars without their own act (100 coins, secret stars) use the time of the act they were grabbed in
+            bool MainCourse = Grab.Course >= 1 && Grab.Course <= 15 && Grab.Act >= 1 && Grab.Act <= 6;
+            int ContextKey = Grab.Course >= 1 && Grab.Course <= 15 && Grab.Star < 6 ? StarKey(Grab.Course, Grab.Star) : StarKey(Grab.Course, MainCourse ? Grab.Act - 1 : StarAnyAct);
+            StarStatsMap::const_iterator Context = Stars.find(ContextKey);
+            Stats.FirstGrabAfter = Context != Stars.end() ? Context->second.Seconds : 0;
+        }
+        Stats.Grabs += 1;
+    }
 }
 
 std::string CPlayTime::RomKey(uint32_t CRC1, uint32_t CRC2, uint8_t Country)
@@ -213,6 +296,7 @@ void CPlayTime::ThreadProc(void)
         itr->second.LastPlayed = TimeNow;
         m_SessionSeconds += Seconds;
         m_UnflushedSeconds += Seconds;
+        TrackStars(Seconds);
         if (m_UnflushedSeconds >= FlushIntervalSeconds)
         {
             Flush();
@@ -260,7 +344,20 @@ void CPlayTime::Flush(void)
 
     const char * Section = itr->first.c_str();
     const GameStats & Stats = itr->second;
-    CIniFile Ini(IniFileName().c_str());
+    std::map<std::string, StarStatsMap>::const_iterator Stars = m_StarStats.find(m_SessionKey);
+    if (Stars != m_StarStats.end() && !Stars->second.empty())
+    {
+        CIniFile StarIni(IniFileName("StarTime.ini").c_str());
+        StarIni.SetAutoFlush(false);
+        for (StarStatsMap::const_iterator Star = Stars->second.begin(); Star != Stars->second.end(); Star++)
+        {
+            const StarStats & s = Star->second;
+            StarIni.SaveString(Section, StarIniKey(Star->first).c_str(), stdstr_f("%u,%u,%u", s.Seconds, s.Grabs, s.FirstGrabAfter).c_str());
+        }
+        StarIni.FlushChanges();
+    }
+
+    CIniFile Ini(IniFileName("PlayTime.ini").c_str());
     Ini.SetAutoFlush(false);
     Ini.SaveString(Section, "Name", Stats.Name.c_str());
     Ini.SaveString(Section, "Play Time", stdstr_f("%u", Stats.Seconds).c_str());
