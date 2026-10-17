@@ -114,6 +114,7 @@ private:
     int StarsCollected(const ROM_INFO * pRomInfo);
     static size_t NextFreeColumn(const ROMBROWSER_FIELDS_LIST & Fields);
     std::map<std::string, int> m_StarCount; // ROM file -> stars in its save, -1 if none
+    void DrawRomListCell(HDC hDC, const RECT & rcCell, int32_t Column, const ROM_INFO * pRomInfo, const std::wstring & Text);
 
     enum
     {
@@ -163,6 +164,7 @@ private:
     ROMBROWSER_FIELDS_LIST m_Fields;
     FIELD_TYPE_LIST m_FieldType;
     std::string m_SelectedRom;
+    std::string m_SelectedRomKey; // Play stats key of the ROM the popup menu was opened on
     bool m_Visible;
     bool m_ShowingRomBrowser;
     bool m_AllowSelectionLastRom;

@@ -91,6 +91,17 @@ void CPlayTime::Start(void)
             }
         }
 
+        m_Completed.clear();
+        CIniFile CompletedIni(IniFileName("Completed.ini").c_str(), false, true);
+        std::vector<std::string> CompletedSections = CompletedIni.GetVectorOfSectionsSorted();
+        for (size_t i = 0; i < CompletedSections.size(); i++)
+        {
+            if (CompletedIni.GetString(CompletedSections[i].c_str(), "Completed", "0") == "1")
+            {
+                m_Completed.insert(CompletedSections[i]);
+            }
+        }
+
         m_Daily.clear();
         CIniFile LogIni(IniFileName("PlayLog.ini").c_str(), false, true);
         std::vector<std::string> Days = LogIni.GetVectorOfSectionsSorted();
@@ -158,6 +169,27 @@ CPlayTime::GameStatsMap CPlayTime::GetAllStats(void)
 {
     CGuard Guard(m_CS);
     return m_Stats;
+}
+
+bool CPlayTime::IsCompleted(const std::string & Key)
+{
+    CGuard Guard(m_CS);
+    return m_Completed.find(Key) != m_Completed.end();
+}
+
+void CPlayTime::SetCompleted(const std::string & Key, bool Completed)
+{
+    CGuard Guard(m_CS);
+    if (Completed)
+    {
+        m_Completed.insert(Key);
+    }
+    else
+    {
+        m_Completed.erase(Key);
+    }
+    CIniFile Ini(IniFileName("Completed.ini").c_str());
+    Ini.SaveString(Key.c_str(), "Completed", Completed ? "1" : "0");
 }
 
 bool CPlayTime::GetStarNames(const std::string & Key, CSm64Probe::Names & Names)

@@ -714,7 +714,7 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
     if (idCtrl != IDC_ROMLIST) { return false; }
     LPDRAWITEMSTRUCT ditem = (LPDRAWITEMSTRUCT)lParam;
 
-    RECT rcItem, rcDraw;
+    RECT rcItem;
     wchar_t String[300];
     LVITEM lvItem;
     HBRUSH hBrush;
@@ -801,8 +801,6 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
     lvItem.pszText = String;
     SendMessage(m_hRomList, LVM_GETITEMTEXT, (WPARAM)ditem->itemID, (LPARAM)&lvItem);
 
-    memcpy(&rcDraw, &rcItem, sizeof(RECT));
-    rcDraw.right -= 3;
     std::wstring text = String;
     if (wcscmp(L"#340#", text.c_str()) == 0)
     {
@@ -813,7 +811,7 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
         text = stdstr(pRomInfo->FileName).ToUTF16();
     }
 
-    DrawText(ditem->hDC, text.c_str(), text.length(), &rcDraw, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_WORD_ELLIPSIS);
+    DrawRomListCell(ditem->hDC, rcItem, 0, pRomInfo, text);
 
     memset(&lvc, 0, sizeof(lvc));
     lvc.mask = LVCF_FMT | LVCF_WIDTH;
@@ -826,8 +824,6 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
         lvItem.cchTextMax = sizeof(String) / sizeof(String[0]);
         lvItem.pszText = String;
         SendMessage(m_hRomList, LVM_GETITEMTEXT, ditem->itemID, (LPARAM)&lvItem);
-        memcpy(&rcDraw, &rcItem, sizeof(RECT));
-        rcDraw.right -= 3;
         text = String;
         if (wcscmp(L"#340#", text.c_str()) == 0)
         {
@@ -838,9 +834,38 @@ bool CRomBrowser::RomListDrawItem(int32_t idCtrl, uint32_t lParam)
             text = stdstr(pRomInfo->FileName).ToUTF16();
         }
 
-        DrawText(ditem->hDC, text.c_str(), text.length(), &rcDraw, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_WORD_ELLIPSIS);
+        DrawRomListCell(ditem->hDC, rcItem, nColumn, pRomInfo, text);
     }
     return true;
+}
+
+void CRomBrowser::DrawRomListCell(HDC hDC, const RECT & rcCell, int32_t Column, const ROM_INFO * pRomInfo, const std::wstring & Text)
+{
+    // The Stars cell of a game marked as 100% complete gets a green background
+    COLORREF OldTextColor = CLR_INVALID;
+    if (Column >= 0 && (size_t)Column < m_FieldType.size() && m_FieldType[Column] == RB_Stars &&
+        CPlayTime::Get().IsCompleted(CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country)) &&
+        StarsCollected(pRomInfo) >= 0)
+    {
+        bool DarkTheme = g_Settings->LoadBool((SettingID)Setting_DarkTheme);
+        COLORREF Fill = DarkTheme ? RGB(38, 96, 54) : RGB(198, 239, 206);
+        HBRUSH_MAP::iterator itr = m_Brushes.find(Fill);
+        if (itr == m_Brushes.end())
+        {
+            itr = m_Brushes.insert(HBRUSH_MAP::value_type(Fill, CreateSolidBrush(Fill))).first;
+        }
+        FillRect(hDC, &rcCell, itr->second);
+        OldTextColor = SetTextColor(hDC, DarkTheme ? RGB(220, 255, 228) : RGB(0, 97, 0));
+    }
+
+    RECT rcDraw = rcCell;
+    rcDraw.right -= 3;
+    DrawText(hDC, Text.c_str(), Text.length(), &rcDraw, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_WORD_ELLIPSIS);
+
+    if (OldTextColor != CLR_INVALID)
+    {
+        SetTextColor(hDC, OldTextColor);
+    }
 }
 
 bool CRomBrowser::RomListNotify(int32_t idCtrl, uint32_t pnmh)
@@ -1133,6 +1158,8 @@ void CRomBrowser::RomList_PopupMenu(uint32_t /*pnmh*/)
 {
     LONG iItem = ListView_GetNextItem(m_hRomList, -1, LVNI_SELECTED);
     m_SelectedRom = "";
+    m_SelectedRomKey = "";
+    bool HasStars = false;
     if (iItem != -1)
     {
         LV_ITEM lvItem;
@@ -1148,6 +1175,8 @@ void CRomBrowser::RomList_PopupMenu(uint32_t /*pnmh*/)
 
         if (!pRomInfo) { return; }
         m_SelectedRom = pRomInfo->szFullFileName;
+        m_SelectedRomKey = CPlayTime::RomKey(pRomInfo->CRC1, pRomInfo->CRC2, pRomInfo->Country);
+        HasStars = StarsCollected(pRomInfo) >= 0;
     }
 
     // Load the menu
@@ -1202,6 +1231,14 @@ void CRomBrowser::RomList_PopupMenu(uint32_t /*pnmh*/)
                 lpmii.fState = 0;
                 SetMenuItemInfo(hPopupMenu, (uint32_t)GfxMenu, MF_BYCOMMAND, &lpmii);
             }
+        }
+
+        // Games with a star count can be marked as 100% complete, which turns their Stars cell green
+        if (HasStars)
+        {
+            bool Completed = CPlayTime::Get().IsCompleted(m_SelectedRomKey);
+            AppendMenu(hPopupMenu, MF_SEPARATOR, 0, nullptr);
+            AppendMenu(hPopupMenu, MF_STRING | (Completed ? MF_CHECKED : MF_UNCHECKED), ID_POPUPMENU_COMPLETED, L"100% Complete");
         }
     }
 
@@ -1410,6 +1447,16 @@ void CRomBrowser::HideRomList(void)
 
 bool CRomBrowser::RomBrowserCommand(uint32_t wParam)
 {
+    if (LOWORD(wParam) == ID_POPUPMENU_COMPLETED)
+    {
+        if (!m_SelectedRomKey.empty())
+        {
+            CPlayTime::Get().SetCompleted(m_SelectedRomKey, !CPlayTime::Get().IsCompleted(m_SelectedRomKey));
+            InvalidateRect(m_hRomList, nullptr, FALSE);
+        }
+        return true;
+    }
+
     if (LOWORD(wParam) != IDC_ROMBROWSER_PROFILE_PRESET_COMBO || HIWORD(wParam) != CBN_SELCHANGE)
     {
         return false;

@@ -58,6 +58,10 @@ public:
     bool GetStats(const std::string & Key, GameStats & Stats);
     GameStatsMap GetAllStats(void);
 
+    // Games the player marked as 100% complete, stored in Completed.ini
+    bool IsCompleted(const std::string & Key);
+    void SetCompleted(const std::string & Key, bool Completed);
+
     static std::string RomKey(uint32_t CRC1, uint32_t CRC2, uint8_t Country);
     static std::wstring FormatDuration(uint32_t Seconds);
     static std::wstring FormatDate(uint32_t Time);
@@ -86,6 +90,7 @@ private:
     GameStatsMap m_Stats;
     std::map<std::string, StarStatsMap> m_StarStats;
     std::map<std::string, CSm64Probe::Names> m_StarNames;
+    std::set<std::string> m_Completed;
     bool m_SessionNamesSaved;
     DailyStatsMap m_Daily;
     std::set<std::string> m_DirtyDays;
