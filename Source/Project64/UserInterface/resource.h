@@ -1017,13 +1017,14 @@
 #define IDC_STARS_SUMMARY               1775
 #define IDC_STARS_LIST                  1776
 #define IDC_STATS_STARS                 1777
+#define ID_POPUPMENU_COMPLETED          40170
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        233
-#define _APS_NEXT_COMMAND_VALUE         40170
+#define _APS_NEXT_COMMAND_VALUE         40171
 #define _APS_NEXT_CONTROL_VALUE         1778
 #define _APS_NEXT_SYMED_VALUE           102
 #endif

@@ -91,6 +91,17 @@ void CPlayTime::Start(void)
             }
         }
 
+        m_Completed.clear();
+        CIniFile CompletedIni(IniFileName("Completed.ini").c_str(), false, true);
+        std::vector<std::string> CompletedSections = CompletedIni.GetVectorOfSectionsSorted();
+        for (size_t i = 0; i < CompletedSections.size(); i++)
+        {
+            if (CompletedIni.GetString(CompletedSections[i].c_str(), "Completed", "0") == "1")
+            {
+                m_Completed.insert(CompletedSections[i]);
+            }
+        }
+
         CIniFile Ini(IniFileName("PlayTime.ini").c_str(), false, true);
         std::vector<std::string> Sections = Ini.GetVectorOfSectionsSorted();
         for (size_t i = 0; i < Sections.size(); i++)
@@ -103,6 +114,8 @@ void CPlayTime::Start(void)
             Stats.LongestSession = IniGetUInt(Ini, Section, "Longest Session");
             Stats.FirstPlayed = IniGetUInt(Ini, Section, "First Played");
             Stats.LastPlayed = IniGetUInt(Ini, Section, "Last Played");
+            std::string CannonStars = Ini.GetString(Section, "Cannon Stars", "");
+            Stats.CannonStars = CannonStars.empty() ? -1 : atoi(CannonStars.c_str());
         }
     }
 
@@ -143,6 +156,27 @@ CPlayTime::GameStatsMap CPlayTime::GetAllStats(void)
 {
     CGuard Guard(m_CS);
     return m_Stats;
+}
+
+bool CPlayTime::IsCompleted(const std::string & Key)
+{
+    CGuard Guard(m_CS);
+    return m_Completed.find(Key) != m_Completed.end();
+}
+
+void CPlayTime::SetCompleted(const std::string & Key, bool Completed)
+{
+    CGuard Guard(m_CS);
+    if (Completed)
+    {
+        m_Completed.insert(Key);
+    }
+    else
+    {
+        m_Completed.erase(Key);
+    }
+    CIniFile Ini(IniFileName("Completed.ini").c_str());
+    Ini.SaveString(Key.c_str(), "Completed", Completed ? "1" : "0");
 }
 
 bool CPlayTime::GetStarNames(const std::string & Key, CSm64Probe::Names & Names)
@@ -194,6 +228,13 @@ void CPlayTime::TrackStars(uint32_t Seconds)
     {
         SaveStarNames(Names);
         m_SessionNamesSaved = true;
+    }
+    int CannonStars = CSm64Probe::GetCannonStars();
+    GameStatsMap::iterator Game = m_Stats.find(m_SessionKey);
+    if (CannonStars >= 0 && Game != m_Stats.end())
+    {
+        // Remembered so the ROM browser counts this hack's saves the way the game does
+        Game->second.CannonStars = CannonStars;
     }
     StarStatsMap & Stars = m_StarStats[m_SessionKey];
 
@@ -323,7 +364,7 @@ void CPlayTime::ThreadProc(void)
         GameStatsMap::iterator itr = m_Stats.find(m_SessionKey);
         if (itr == m_Stats.end())
         {
-            GameStats NewStats = { "", 0, 0, 0, TimeNow, TimeNow };
+            GameStats NewStats = { "", 0, 0, 0, TimeNow, TimeNow, -1 };
             itr = m_Stats.insert(GameStatsMap::value_type(m_SessionKey, NewStats)).first;
         }
 
@@ -420,5 +461,9 @@ void CPlayTime::Flush(void)
     Ini.SaveString(Section, "Longest Session", stdstr_f("%u", Stats.LongestSession).c_str());
     Ini.SaveString(Section, "First Played", stdstr_f("%u", Stats.FirstPlayed).c_str());
     Ini.SaveString(Section, "Last Played", stdstr_f("%u", Stats.LastPlayed).c_str());
+    if (Stats.CannonStars >= 0)
+    {
+        Ini.SaveString(Section, "Cannon Stars", stdstr_f("%d", Stats.CannonStars).c_str());
+    }
     Ini.FlushChanges();
 }
