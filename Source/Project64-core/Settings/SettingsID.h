@@ -61,6 +61,7 @@ enum SettingID
     Setting_CurrentLanguage,
     Setting_EnableDisk,
 	Setting_SyncViaAudioEnabled,
+    Setting_NtscFrameRate,
 	Setting_Enhancement,
     Setting_DiskSaveType,
 

@@ -27,6 +27,7 @@ CMainMenu::CMainMenu(CMainGui* hMainWindow, ProfileManager& profileManager) :
     hMainWindow->SetWindowMenu(this);
 
     m_ChangeSettingList.push_back(GameRunning_LimitFPS);
+    m_ChangeSettingList.push_back(Setting_NtscFrameRate);
     m_ChangeUISettingList.push_back(UserInterface_InFullScreen);
     m_ChangeUISettingList.push_back(UserInterface_AlwaysOnTop);
     m_ChangeUISettingList.push_back(UserInterface_ShowingNagWindow);
@@ -390,6 +391,9 @@ bool CMainMenu::ProcessMessage(HWND hWnd, DWORD /*FromAccelerator*/, DWORD MenuI
         WriteTrace(TraceUserInterface, TraceDebug, "ID_SYSTEM_LIMITFPS");
         g_Settings->SaveBool(GameRunning_LimitFPS, !g_Settings->LoadBool(GameRunning_LimitFPS));
         WriteTrace(TraceUserInterface, TraceDebug, "ID_SYSTEM_LIMITFPS 1");
+        break;
+    case ID_SYSTEM_NTSC_FRAME_RATE:
+        g_Settings->SaveBool(Setting_NtscFrameRate, !g_Settings->LoadBool(Setting_NtscFrameRate));
         break;
     case ID_SYSTEM_SWAPDISK:
         WriteTrace(TraceUserInterface, TraceDebug, "ID_SYSTEM_SWAPDISK");
@@ -1470,6 +1474,9 @@ void CMainMenu::FillOutMenu(HMENU hMenu)
     {
         Item.Reset(ID_SYSTEM_LIMITFPS, MENU_LIMIT_FPS, m_ShortCuts.ShortCutString(ID_SYSTEM_LIMITFPS, RunningState));
         if (g_Settings->LoadBool(GameRunning_LimitFPS)) { Item.SetItemTicked(true); }
+        SystemMenu.push_back(Item);
+        Item.Reset(ID_SYSTEM_NTSC_FRAME_RATE, EMPTY_STRING, EMPTY_STDSTR, nullptr, L"NTSC Frame Rate (59.94 FPS)");
+        if (g_Settings->LoadBool(Setting_NtscFrameRate)) { Item.SetItemTicked(true); }
         SystemMenu.push_back(Item);
         SystemMenu.push_back(MENU_ITEM(SPLITER));
     }
