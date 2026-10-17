@@ -30,6 +30,7 @@ void CFramePerSecond::Reset(bool ClearDisplay)
 {
     m_CurrentDlistFrame = 0;
     m_CurrentViFrame = 0;
+    m_DlistFrameRate = -1.0;
     m_LastViFrame.SetMicroSeconds(0);
 
     for (int count = 0; count < NoOfFrames; count++)
@@ -89,6 +90,11 @@ void CFramePerSecond::UpdateDisplay(void)
         if (DisplayString.length() > 0) { DisplayString += " "; }
         DisplayString += stdstr_f(m_DlistFrameRate >= 0 ? "DL/s: %.1f" : "DL/s: -.--", m_DlistFrameRate);
     }
+    if (m_iFrameRateType == FR_FPS)
+    {
+        // Frames the game actually renders (one display list each), so game lag shows up here
+        DisplayString = stdstr_f(m_DlistFrameRate >= 0 ? "FPS: %.1f" : "FPS: --", m_DlistFrameRate);
+    }
     g_Notify->DisplayMessage2(DisplayString.c_str());
 }
 
@@ -145,7 +151,7 @@ void CFramePerSecond::UpdateDlCounter(void)
     {
         return;
     }
-    if (m_iFrameRateType != FR_DLs && m_iFrameRateType != FR_VIs_DLs)
+    if (m_iFrameRateType != FR_DLs && m_iFrameRateType != FR_VIs_DLs && m_iFrameRateType != FR_FPS)
     {
         return;
     }
