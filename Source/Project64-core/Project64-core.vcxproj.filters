@@ -201,6 +201,9 @@
     <ClCompile Include="N64System\FramePerSecond.cpp">
       <Filter>Source Files\N64 System</Filter>
     </ClCompile>
+    <ClCompile Include="N64System\HostScheduler.cpp">
+      <Filter>Source Files\N64 System</Filter>
+    </ClCompile>
     <ClCompile Include="N64System\N64System.cpp">
       <Filter>Source Files\N64 System</Filter>
     </ClCompile>
@@ -630,6 +633,9 @@
       <Filter>Header Files\N64 System\Interpreter</Filter>
     </ClInclude>
     <ClInclude Include="N64System\SpeedLimiter.h">
+      <Filter>Header Files\N64 System</Filter>
+    </ClInclude>
+    <ClInclude Include="N64System\HostScheduler.h">
       <Filter>Header Files\N64 System</Filter>
     </ClInclude>
     <ClInclude Include="TraceModulesProject64.h">

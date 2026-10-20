@@ -63,6 +63,7 @@ enum SettingID
 	Setting_SyncViaAudioEnabled,
 	Setting_Enhancement,
     Setting_DiskSaveType,
+    Setting_HighPerformanceScheduling,
 
     // Default settings
     Default_RDRamSize,
