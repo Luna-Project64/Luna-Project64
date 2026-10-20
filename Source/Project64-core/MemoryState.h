@@ -13,12 +13,20 @@
 #include <Project64-core/N64System/Mips/TLB.h>
 #include <Common/path.h>
 
+#include <memory>
+
 struct MemoryState
 {
 public:
     MemoryState() = default;
 
     void store(CPath& SaveFile, const CPath& ExtraInfo);
+
+    // Reads a zipped savestate written by store(). Returns nothing unless the
+    // file holds both the main state and the v2 extra info in exactly the
+    // layout store() writes; anything older or odd is left to the regular
+    // file loader.
+    static std::shared_ptr<MemoryState> Load(const char * ZipFile, uint32_t MainId, uint32_t ExtraId);
 
     struct TimerState
     {

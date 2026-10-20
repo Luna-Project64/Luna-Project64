@@ -62,3 +62,114 @@ void MemoryState::store(CPath& SaveFile, const CPath& ExtraInfo)
 
     zipClose(file, "");
 }
+
+namespace
+{
+
+bool ReadExact(unzFile File, void * Buffer, uint32_t Length)
+{
+    return unzReadCurrentFile(File, Buffer, Length) == (int)Length;
+}
+
+bool ReadMainState(unzFile File, MemoryState & State)
+{
+    if (!ReadExact(File, &State.RdramSize, sizeof(uint32_t)) ||
+        State.RdramSize == 0 || State.RdramSize > sizeof(State.Rdram))
+    {
+        return false;
+    }
+    return ReadExact(File, State.RomData, 0x40) &&
+        ReadExact(File, &State.NextViTimer, sizeof(uint32_t)) &&
+        ReadExact(File, &State.ProgramCounter, sizeof(State.ProgramCounter)) &&
+        ReadExact(File, State.GPR, sizeof(int64_t) * 32) &&
+        ReadExact(File, State.FPR, sizeof(int64_t) * 32) &&
+        ReadExact(File, State.CP0, sizeof(uint32_t) * 32) &&
+        ReadExact(File, State.FPCR, sizeof(uint32_t) * 32) &&
+        ReadExact(File, &State.HI, sizeof(int64_t)) &&
+        ReadExact(File, &State.LO, sizeof(int64_t)) &&
+        ReadExact(File, State.RDRAM_Registers, sizeof(uint32_t) * 10) &&
+        ReadExact(File, State.SigProcessor_Interface, sizeof(uint32_t) * 10) &&
+        ReadExact(File, State.Display_ControlReg, sizeof(uint32_t) * 10) &&
+        ReadExact(File, State.Mips_Interface, sizeof(uint32_t) * 4) &&
+        ReadExact(File, State.Video_Interface, sizeof(uint32_t) * 14) &&
+        ReadExact(File, State.Audio_Interface, sizeof(uint32_t) * 6) &&
+        ReadExact(File, State.Peripheral_Interface, sizeof(uint32_t) * 13) &&
+        ReadExact(File, State.RDRAM_Interface, sizeof(uint32_t) * 8) &&
+        ReadExact(File, State.SerialInterface, sizeof(uint32_t) * 4) &&
+        ReadExact(File, State.TLB, sizeof(CTLB::TLB_ENTRY) * 32) &&
+        ReadExact(File, State.PifRam, 0x40) &&
+        ReadExact(File, State.Rdram, State.RdramSize) &&
+        ReadExact(File, State.Dmem, 0x1000) &&
+        ReadExact(File, State.Imem, 0x1000);
+}
+
+bool ReadExtraState(unzFile File, MemoryState & State)
+{
+    uint32_t TimerDetailsSize = 0, Entries = 0;
+    if (!ReadExact(File, State.DiskInterface, sizeof(uint32_t) * 22) ||
+        !ReadExact(File, &TimerDetailsSize, sizeof(TimerDetailsSize)) ||
+        !ReadExact(File, &Entries, sizeof(Entries)))
+    {
+        return false;
+    }
+    MemoryState::TimerState & Timers = State.TimerStat;
+    if (TimerDetailsSize != sizeof(Timers.Detatils[0]) || Entries != sizeof(Timers.Detatils) / sizeof(Timers.Detatils[0]))
+    {
+        return false;
+    }
+    return ReadExact(File, Timers.Detatils, sizeof(Timers.Detatils)) &&
+        ReadExact(File, &Timers.LastUpdate, sizeof(Timers.LastUpdate)) &&
+        ReadExact(File, &Timers.Next, sizeof(Timers.Next)) &&
+        ReadExact(File, &Timers.Current, sizeof(Timers.Current));
+}
+
+} // namespace
+
+std::shared_ptr<MemoryState> MemoryState::Load(const char * ZipFile, uint32_t MainId, uint32_t ExtraId)
+{
+    unzFile File = unzOpen(ZipFile);
+    if (File == nullptr)
+    {
+        return nullptr;
+    }
+
+    // Every field is overwritten below, so skip zeroing 8MB up front
+    std::shared_ptr<MemoryState> State(new MemoryState);
+    bool HaveMain = false, HaveExtra = false, Failed = false;
+    for (int Result = unzGoToFirstFile(File); Result == UNZ_OK && !Failed; Result = unzGoToNextFile(File))
+    {
+        if (unzOpenCurrentFile(File) != UNZ_OK)
+        {
+            Failed = true;
+            break;
+        }
+        uint32_t Id = 0;
+        if (ReadExact(File, &Id, sizeof(Id)))
+        {
+            if (Id == MainId && !HaveMain)
+            {
+                State->SaveID_0 = Id;
+                HaveMain = ReadMainState(File, *State);
+                Failed = !HaveMain;
+            }
+            else if (Id == ExtraId && !HaveExtra)
+            {
+                State->SaveID_2 = Id;
+                HaveExtra = ReadExtraState(File, *State);
+                Failed = !HaveExtra;
+            }
+        }
+        if (unzCloseCurrentFile(File) != UNZ_OK)
+        {
+            // A CRC mismatch is reported here, after the data has been read
+            Failed = true;
+        }
+    }
+    unzClose(File);
+
+    if (Failed || !HaveMain || !HaveExtra)
+    {
+        return nullptr;
+    }
+    return State;
+}

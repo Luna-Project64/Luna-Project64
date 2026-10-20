@@ -29,6 +29,24 @@
 
 #pragma warning(disable : 4355) // Disable 'this' : used in base member initializer list
 
+// Identifies a savestate file's current contents well enough to tell whether
+// an in-memory copy of it is still the same state.
+static bool StateFileStamp(const std::string & File, uint64_t & WriteTime, uint64_t & FileSize)
+{
+#ifdef _WIN32
+    WIN32_FILE_ATTRIBUTE_DATA Data;
+    if (!GetFileAttributesExA(File.c_str(), GetFileExInfoStandard, &Data))
+    {
+        return false;
+    }
+    WriteTime = ((uint64_t)Data.ftLastWriteTime.dwHighDateTime << 32) | Data.ftLastWriteTime.dwLowDateTime;
+    FileSize = ((uint64_t)Data.nFileSizeHigh << 32) | Data.nFileSizeLow;
+    return true;
+#else
+    return false;
+#endif
+}
+
 CN64System::CN64System(CPlugins * Plugins, uint32_t randomizer_seed, bool SavesReadOnly, bool SyncSystem) :
     CSystemEvents(this, Plugins),
     m_EndEmulation(false),
@@ -2121,6 +2139,32 @@ bool CN64System::LoadState()
         }
     }
 
+    // A state that has already been read or written this session loads
+    // straight from memory. The first load of a slot from disk goes through
+    // the same in-memory path and leaves the state cached for the next one.
+    if (m_SaverThread && g_Settings->LoadDword(Setting_AutoZipInstantSave))
+    {
+        state = FindCachedState(ZipFileName);
+        if (!state && ZipFileName.Exists())
+        {
+            state = MemoryState::Load(ZipFileName, SaveID_0, SaveID_2);
+            if (state && StateMatchesRom(*state))
+            {
+                CacheState(ZipFileName, state);
+            }
+            else
+            {
+                // Leave anything unusual, including a header mismatch the
+                // user should be asked about, to the regular loader
+                state = nullptr;
+            }
+        }
+        if (state && LoadState(ZipFileName, state))
+        {
+            return true;
+        }
+    }
+
     if (g_Settings->LoadDword(Setting_AutoZipInstantSave))
     {
         FileName = ZipFileName;
@@ -2839,6 +2883,11 @@ void CN64System::TLB_Changed()
 
 void CN64System::StateSaverThread()
 {
+#ifdef _WIN32
+    // Compressing a savestate is background work; keep it out of the way of
+    // the emulation and graphics threads.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#endif
     std::unique_lock<std::mutex> lck(m_StatesMutex);
     while (true)
     {
@@ -2858,6 +2907,9 @@ void CN64System::StateSaverThread()
 
         lck.unlock();
         StateInfo.State->store(SaveFile, StateInfo.ExtraInfo);
+        std::string ZipFile = (const std::string &)SaveFile + ".zip";
+        uint64_t WriteTime = 0, FileSize = 0;
+        bool Stamped = StateFileStamp(ZipFile, WriteTime, FileSize);
         lck.lock();
 
         auto it = m_States.find(SaveFile);
@@ -2865,9 +2917,87 @@ void CN64System::StateSaverThread()
         {
             if (it->second.State == StateInfo.State)
             {
+                // Keep the state for reloads now that it matches the file
+                if (Stamped)
+                {
+                    CacheStateLocked(ZipFile, StateInfo.State, WriteTime, FileSize);
+                }
                 m_States.erase(SaveFile);
                 m_ThrollingCV.notify_one();
             }
         }
     }
+}
+
+std::shared_ptr<MemoryState> CN64System::FindCachedState(const std::string & ZipFile)
+{
+    CachedState Entry;
+    {
+        std::lock_guard<std::mutex> lck(m_StatesMutex);
+        auto it = m_StateCache.find(ZipFile);
+        if (it == m_StateCache.end())
+        {
+            return nullptr;
+        }
+        it->second.LastUsed = ++m_StateCacheClock;
+        Entry = it->second;
+    }
+
+    uint64_t WriteTime = 0, FileSize = 0;
+    if (StateFileStamp(ZipFile, WriteTime, FileSize) && WriteTime == Entry.WriteTime && FileSize == Entry.FileSize)
+    {
+        return Entry.State;
+    }
+
+    // The file was replaced or removed behind our back; the copy is stale
+    std::lock_guard<std::mutex> lck(m_StatesMutex);
+    auto it = m_StateCache.find(ZipFile);
+    if (it != m_StateCache.end() && it->second.State == Entry.State)
+    {
+        m_StateCache.erase(it);
+    }
+    return nullptr;
+}
+
+void CN64System::CacheState(const std::string & ZipFile, const std::shared_ptr<MemoryState> & State)
+{
+    uint64_t WriteTime = 0, FileSize = 0;
+    if (!StateFileStamp(ZipFile, WriteTime, FileSize))
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lck(m_StatesMutex);
+    CacheStateLocked(ZipFile, State, WriteTime, FileSize);
+}
+
+void CN64System::CacheStateLocked(const std::string & ZipFile, const std::shared_ptr<MemoryState> & State, uint64_t WriteTime, uint64_t FileSize)
+{
+    CachedState & Entry = m_StateCache[ZipFile];
+    Entry.State = State;
+    Entry.WriteTime = WriteTime;
+    Entry.FileSize = FileSize;
+    Entry.LastUsed = ++m_StateCacheClock;
+
+    while (m_StateCache.size() > MaxCachedStates)
+    {
+        auto Oldest = m_StateCache.begin();
+        for (auto it = m_StateCache.begin(); it != m_StateCache.end(); it++)
+        {
+            if (it->second.LastUsed < Oldest->second.LastUsed)
+            {
+                Oldest = it;
+            }
+        }
+        m_StateCache.erase(Oldest);
+    }
+}
+
+bool CN64System::StateMatchesRom(const MemoryState & State) const
+{
+    if (g_Settings->LoadBool(Setting_EnableDisk) && g_Disk)
+    {
+        return memcmp(State.RomData, &g_Rom->GetRomAddress()[0x10], 0x20) == 0 &&
+            memcmp(&State.RomData[0x20], g_Disk->GetDiskAddressID(), 0x20) == 0;
+    }
+    return memcmp(State.RomData, g_Rom->GetRomAddress(), 0x40) == 0;
 }
