@@ -580,6 +580,7 @@ enum LanguageStringID
     STR_FR_PERCENT = 702,
     STR_FR_DLS_VIS = 703,
 	STR_FR_NONE = 704,
+    STR_FR_FPS = 705,
 
     // Increase speed
     STR_INSREASE_SPEED = 710,
