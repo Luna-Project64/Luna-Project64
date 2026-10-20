@@ -133,6 +133,7 @@ private:
     void TLB_Unmaped(uint32_t VAddr, uint32_t Len);
     void TLB_Changed();
 
+    static void CALL NtscFrameRateChanged(CN64System * _this);
     void StateSaverThread();
 
     CPlugins      * const m_Plugins;  // The plugin container

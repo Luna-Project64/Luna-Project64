@@ -67,6 +67,8 @@ CN64System::CN64System(CPlugins * Plugins, uint32_t randomizer_seed, bool SavesR
         gameHertz = (SystemType() == SYSTEM_PAL) ? 50 : 60;
     }
     m_Limiter.SetHertz(gameHertz);
+    m_Limiter.SetNtscRate(g_Settings->LoadBool(Setting_NtscFrameRate));
+    g_Settings->RegisterChangeCB(Setting_NtscFrameRate, this, (CSettings::SettingChangedFunc)NtscFrameRateChanged);
     g_Settings->SaveDword(GameRunning_ScreenHertz, gameHertz);
     WriteTrace(TraceN64System, TraceDebug, "Setting up system");
     CInterpreterCPU::BuildCPU();
@@ -138,6 +140,7 @@ CN64System::CN64System(CPlugins * Plugins, uint32_t randomizer_seed, bool SavesR
 
 CN64System::~CN64System()
 {
+    g_Settings->UnregisterChangeCB(Setting_NtscFrameRate, this, (CSettings::SettingChangedFunc)NtscFrameRateChanged);
     if (m_SaverThread)
     {
         std::lock_guard<std::mutex> lock(m_StatesMutex);
@@ -2835,6 +2838,11 @@ void CN64System::TLB_Changed()
     {
         g_Debugger->TLBChanged();
     }
+}
+
+void CALL CN64System::NtscFrameRateChanged(CN64System * _this)
+{
+    _this->m_Limiter.SetNtscRate(g_Settings->LoadBool(Setting_NtscFrameRate));
 }
 
 void CN64System::StateSaverThread()

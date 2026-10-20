@@ -29,6 +29,10 @@ public:
 	void AlterSpeed(const ESpeedChange SpeedChange);
 
     void SetSpeed(int Speed);
+
+    // Run 60Hz games at the NTSC broadcast rate, 60/1.001 = 59.94 frames
+    // per second, instead of an even 60. Other base rates are unaffected.
+    void SetNtscRate(bool Ntsc);
     int GetSpeed(void) const;
     int GetBaseSpeed(void) const;
     void AdjustTime(HighResTimeStamp);
@@ -57,11 +61,13 @@ private:
     // the emulation thread picks a change up on its next frame.
     std::atomic<uint32_t> m_Speed;
     std::atomic<bool> m_ReanchorPending;
+    std::atomic<bool> m_NtscRate;
     uint32_t m_BaseSpeed;
 
     // Owned by the emulation thread
     int64_t m_Frequency;
     uint32_t m_ActiveSpeed;
+    bool m_ActiveNtsc;
     int64_t m_Anchor;
     uint64_t m_FramesSinceAnchor;
     int64_t m_FpsWindowStart;
