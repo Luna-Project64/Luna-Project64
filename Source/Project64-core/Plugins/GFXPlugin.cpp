@@ -5,6 +5,7 @@
 #include <Project64-core/N64System/Mips/MemoryVirtualMem.h>
 #include <Project64-core/N64System/Mips/Register.h>
 #include <Project64-core/N64System/N64System.h>
+#include <Project64-core/N64System/HostScheduler.h>
 #include <Project64/MenuId.h>
 #include "GFXPlugin.h"
 
@@ -43,6 +44,12 @@ struct LunaRenderApi
 	void (*DestroyRenderWindow)(HWND, HWND);
 };
 
+struct LunaThreadBoosterApi
+{
+    void (*BoostCurrentThread)();
+    void (*UnboostCurrentThread)();
+};
+
 bool CGfxPlugin::LoadFunctions(void)
 {
     // Find entries for functions in DLL
@@ -57,6 +64,7 @@ bool CGfxPlugin::LoadFunctions(void)
     LoadFunction(ViWidthChanged);
     LoadFunction(SoftReset);
     LoadFunction(LunaRegisterRenderWindowApi);
+    LoadFunction(LunaRegisterThreadBoosterApi);
 
     // Version 0x104 functions
     _LoadFunction("DrawFullScreenStatus", DrawStatus);
@@ -115,6 +123,14 @@ bool CGfxPlugin::LoadFunctions(void)
 		};
 
 		LunaRegisterRenderWindowApi(&rapi);
+    }
+
+    if (LunaRegisterThreadBoosterApi)
+    {
+        LunaThreadBoosterApi tbapi;
+        tbapi.BoostCurrentThread   = []() { CHostScheduler::EnterEmulation(); };
+        tbapi.UnboostCurrentThread = []() { CHostScheduler::LeaveEmulation(); };
+        LunaRegisterThreadBoosterApi(&tbapi);
     }
 
     return true;
