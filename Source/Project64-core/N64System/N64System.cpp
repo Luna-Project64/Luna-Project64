@@ -2771,19 +2771,26 @@ void CN64System::RefreshScreen()
     if ((bBasicMode() || bLimitFPS()) && (!bSyncToAudio() || !FullSpeed()))
     {
         if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_Idel); }
-        uint32_t FrameRate;
-        if (m_Limiter.Timer_Process(&FrameRate) && bDisplayFrameRate())
+        uint32_t FrameRate = 0, FrameRateFraction = 0;
+        bool FrameRateReady = m_Limiter.Timer_Process(&FrameRate, &FrameRateFraction);
+        if (FrameRateReady && bDisplayFrameRate())
         {
-            m_FPS.DisplayViCounter(FrameRate, 0);
+            m_FPS.DisplayViCounter(FrameRate, FrameRateFraction);
             m_bCleanFrameBox = true;
         }
         if (bShowCPUPer()) { m_CPU_Usage.StopTimer(); }
     }
-    else if (bDisplayFrameRate())
+    else
     {
-        if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateFPS); }
-        m_FPS.UpdateViCounter();
-        m_bCleanFrameBox = true;
+        // Nothing is pacing these frames, so when the limiter comes back it
+        // should start a fresh schedule rather than see itself as behind.
+        m_Limiter.Reset();
+        if (bDisplayFrameRate())
+        {
+            if (bShowCPUPer()) { m_CPU_Usage.StartTimer(Timer_UpdateFPS); }
+            m_FPS.UpdateViCounter();
+            m_bCleanFrameBox = true;
+        }
     }
 
     if (m_bCleanFrameBox && !bDisplayFrameRate())
