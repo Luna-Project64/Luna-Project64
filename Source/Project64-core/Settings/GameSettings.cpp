@@ -32,6 +32,8 @@ SYSTEM_TYPE CGameSettings::m_SystemType = SYSTEM_NTSC;
 CPU_TYPE CGameSettings::m_CpuType = CPU_Recompiler;
 uint32_t CGameSettings::m_OverClockModifier = 1;
 DISK_SEEK_TYPE CGameSettings::m_DiskSeekTimingType = DiskSeek_Turbo;
+bool CGameSettings::m_bUnalignedDMA = true;
+bool CGameSettings::m_bAllowROMWrites = false;
 bool CGameSettings::m_EnhancmentOverClock = false;
 uint32_t CGameSettings::m_EnhancmentOverClockModifier = 1;
 
@@ -76,6 +78,8 @@ void CGameSettings::RefreshGameSettings()
 	if (m_OverClockModifier < 1) { m_OverClockModifier = 1; }
     if (m_OverClockModifier > 20) { m_OverClockModifier = 20; }
     m_DiskSeekTimingType = (DISK_SEEK_TYPE)g_Settings->LoadDword(Game_DiskSeekTiming);
+    m_bUnalignedDMA = g_Settings->LoadBool(Game_UnalignedDMA);
+    m_bAllowROMWrites = g_Settings->LoadBool(Game_AllowROMWrites);
 	RefreshSyncToAudio();
     WriteTrace(TraceN64System, TraceDebug, "Done");
 }

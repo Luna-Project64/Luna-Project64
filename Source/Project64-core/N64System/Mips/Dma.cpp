@@ -97,7 +97,7 @@ void CDMA::PI_DMA_READ()
     }
 
     // Write ROM area (for 64DD conversion)
-    if (g_Reg->PI_CART_ADDR_REG >= 0x10000000 && g_Reg->PI_CART_ADDR_REG <= 0x1FBFFFFF && g_Settings->LoadBool(Game_AllowROMWrites))
+    if (g_Reg->PI_CART_ADDR_REG >= 0x10000000 && g_Reg->PI_CART_ADDR_REG <= 0x1FBFFFFF && g_System->bAllowROMWrites())
     {
         uint32_t i;
         uint8_t * ROM = g_Rom->GetRomAddress();
@@ -225,7 +225,7 @@ void CDMA::PI_DMA_WRITE()
 {
     // Rounding PI_WR_LEN_REG up to the nearest even number fixes AI Shougi 3, Doraemon 3, etc.
     uint32_t PI_WR_LEN_REG = ((g_Reg->PI_WR_LEN_REG) & 0x00FFFFFEul) + 2;
-    uint32_t PI_CART_ADDR_REG = !g_Settings->LoadBool(Game_UnalignedDMA) ? g_Reg->PI_CART_ADDR_REG & ~1 : g_Reg->PI_CART_ADDR_REG;
+    uint32_t PI_CART_ADDR_REG = !g_System->bUnalignedDMA() ? g_Reg->PI_CART_ADDR_REG & ~1 : g_Reg->PI_CART_ADDR_REG;
     uint32_t PI_DRAM_ADDR_REG = g_Reg->PI_DRAM_ADDR_REG & 0x00FFFFFF;
 
     g_Reg->PI_STATUS_REG |= PI_STATUS_DMA_BUSY;
